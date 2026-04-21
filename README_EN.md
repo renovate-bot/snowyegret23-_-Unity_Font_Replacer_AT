@@ -11,6 +11,7 @@ Unlike the original Python release layout, the C# port exposes its features thro
 
 - Replace Unity `Font` TTF assets
 - Replace TMP `MonoBehaviour`, atlas, and material data
+- Auto-generate dummy DLLs for Il2Cpp games when `Managed` is missing
 - JSON-based `parse` + `list` workflow
 - Export TMP font assets with `export`
 - Generate TMP-compatible SDF data with `makesdf`
@@ -25,20 +26,25 @@ Release ZIPs typically look like this:
 release/
 ├── UnityFontReplacer_KO.exe
 ├── KR_ASSETS/
+├── Il2CppDumper/
 └── README.md
 
 release_en/
 ├── UnityFontReplacer_EN.exe
 ├── KR_ASSETS/
+├── Il2CppDumper/
 └── README_EN.md
 ```
 
 - `UnityFontReplacer_KO.exe`: Korean UI
 - `UnityFontReplacer_EN.exe`: English UI
 - `KR_ASSETS/`: bundled replacement fonts and SDF resources
+- `Il2CppDumper/`: helper for generating dummy `Managed` DLLs on Il2Cpp games
 
 `classdata.tpk` is not included in releases.  
 If it is missing, the tool downloads it on first run.
+
+For Il2Cpp games without a `Managed` folder, the bundled `Il2CppDumper` is used automatically on first run to generate dummy DLLs.
 
 ## Quick Start
 
@@ -219,6 +225,7 @@ Generated files:
 - `publish\UnityFontReplacer_KO.exe`
 - `publish\UnityFontReplacer_EN.exe`
 - `publish\KR_ASSETS\`
+- `publish\Il2CppDumper\`
 
 ## GitHub Release
 
@@ -236,3 +243,4 @@ Users download it automatically when the executable starts.
 - Some games restore modified files through integrity checks.
 - `diag` is intended for troubleshooting rather than regular end users.
 - `AssetsTools.NET` is included as a Git submodule and should remain vendor-owned.
+- For Il2Cpp games without `Managed`, `GameAssembly.dll`, `global-metadata.dat`, and the bundled `Il2CppDumper` are required.

@@ -17,6 +17,15 @@ public static class ParseCommand
             AnsiConsole.MarkupLine($"[red]{Strings.Get("err_gamepath_not_found", gamePath)}[/]");
             return;
         }
+        try
+        {
+            Il2CppManagedGenerator.EnsureManagedFolder(resolved);
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
+            return;
+        }
 
         AnsiConsole.MarkupLine($"[green]{Strings.Get("scan_start")}[/]");
 

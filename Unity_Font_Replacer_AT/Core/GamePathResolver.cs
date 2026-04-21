@@ -4,7 +4,7 @@ public class ResolvedGamePath
 {
     public required string GamePath { get; init; }
     public required string DataPath { get; init; }
-    public string? ManagedPath { get; init; }
+    public string? ManagedPath { get; set; }
     public required List<string> AssetFiles { get; init; }
 }
 

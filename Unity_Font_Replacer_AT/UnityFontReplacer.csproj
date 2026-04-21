@@ -57,10 +57,15 @@
   <Target Name="CopyPublishSupportFiles" AfterTargets="Publish">
     <ItemGroup>
       <KrAssetsFiles Include="$(MSBuildProjectDirectory)\..\KR_ASSETS\**\*" />
+      <Il2CppDumperFiles Include="$(MSBuildProjectDirectory)\..\Il2CppDumper\**\*" />
     </ItemGroup>
 
     <Copy SourceFiles="@(KrAssetsFiles)"
           DestinationFiles="@(KrAssetsFiles->'$(PublishDir)KR_ASSETS\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+
+    <Copy SourceFiles="@(Il2CppDumperFiles)"
+          DestinationFiles="@(Il2CppDumperFiles->'$(PublishDir)Il2CppDumper\%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />
   </Target>
 
@@ -75,6 +80,7 @@
 
     <ItemGroup>
       <KrAssetsFiles Include="$(MSBuildProjectDirectory)\..\KR_ASSETS\**\*" />
+      <Il2CppDumperFiles Include="$(MSBuildProjectDirectory)\..\Il2CppDumper\**\*" />
     </ItemGroup>
 
     <MakeDir Directories="$(VariantPublishDir)" />
@@ -95,6 +101,10 @@
 
     <Copy SourceFiles="@(KrAssetsFiles)"
           DestinationFiles="@(KrAssetsFiles->'$(VariantPublishDir)KR_ASSETS\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+
+    <Copy SourceFiles="@(Il2CppDumperFiles)"
+          DestinationFiles="@(Il2CppDumperFiles->'$(VariantPublishDir)Il2CppDumper\%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />
   </Target>
 

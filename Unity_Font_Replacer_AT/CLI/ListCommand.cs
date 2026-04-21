@@ -35,6 +35,15 @@ public static class ListCommand
             AnsiConsole.MarkupLine($"[red]{Strings.Get("err_gamepath_not_found", mapping.GamePath)}[/]");
             return;
         }
+        try
+        {
+            Il2CppManagedGenerator.EnsureManagedFolder(resolved);
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
+            return;
+        }
 
         // 교체 대상 수 확인
         var replaceCount = mapping.Fonts.Values.Count(e => !string.IsNullOrWhiteSpace(e.ReplaceTo));

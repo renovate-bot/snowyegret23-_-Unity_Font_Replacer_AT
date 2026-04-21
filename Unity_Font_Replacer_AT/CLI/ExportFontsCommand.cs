@@ -16,6 +16,15 @@ public static class ExportFontsCommand
             AnsiConsole.MarkupLine($"[red]{Strings.Get("err_gamepath_not_found", gamePath)}[/]");
             return;
         }
+        try
+        {
+            Il2CppManagedGenerator.EnsureManagedFolder(resolved);
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
+            return;
+        }
 
         using var ctx = new AssetsContext(resolved.DataPath, resolved.ManagedPath);
 

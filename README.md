@@ -12,6 +12,7 @@ Unity 게임의 TTF 폰트와 TextMeshPro(TMP) SDF 폰트를 스캔, 교체, 추
 
 - TTF `Font` 에셋 교체
 - TMP `MonoBehaviour` / atlas / material 교체
+- `Managed` 폴더가 없는 Il2Cpp 게임에서 더미 DLL 자동 생성
 - `parse` + `list` 기반 JSON 매핑 작업
 - TMP 폰트 추출 (`export`)
 - TTF -> TMP SDF 생성 (`makesdf`)
@@ -26,20 +27,25 @@ Unity 게임의 TTF 폰트와 TextMeshPro(TMP) SDF 폰트를 스캔, 교체, 추
 release/
 ├── UnityFontReplacer_KO.exe
 ├── KR_ASSETS/
+├── Il2CppDumper/
 └── README.md
 
 release_en/
 ├── UnityFontReplacer_EN.exe
 ├── KR_ASSETS/
+├── Il2CppDumper/
 └── README_EN.md
 ```
 
 - `UnityFontReplacer_KO.exe`: 한국어 UI
 - `UnityFontReplacer_EN.exe`: 영어 UI
 - `KR_ASSETS/`: 내장 교체 폰트 및 SDF 리소스
+- `Il2CppDumper/`: Il2Cpp 게임용 더미 `Managed` 생성 도구
 
 `classdata.tpk`는 릴리즈에 포함하지 않습니다.  
 파일이 없으면 프로그램이 첫 실행 시 자동 다운로드를 시도합니다.
+
+`Managed` 폴더가 없는 Il2Cpp 게임은, 포함된 `Il2CppDumper`로 첫 실행 시 더미 DLL을 자동 생성합니다.
 
 ## 빠른 시작
 
@@ -220,6 +226,7 @@ dotnet msbuild .\Unity_Font_Replacer_AT\UnityFontReplacer.csproj /t:PublishLocal
 - `publish\UnityFontReplacer_KO.exe`
 - `publish\UnityFontReplacer_EN.exe`
 - `publish\KR_ASSETS\`
+- `publish\Il2CppDumper\`
 
 ## GitHub Release
 
@@ -237,3 +244,4 @@ dotnet msbuild .\Unity_Font_Replacer_AT\UnityFontReplacer.csproj /t:PublishLocal
 - 일부 게임은 무결성 검사로 수정 파일을 복구합니다.
 - `diag`는 최종 사용자용 기능보다는 문제 분석용입니다.
 - `AssetsTools.NET`은 서브모듈로 포함되며 이 저장소에서 직접 수정하지 않는 것을 전제로 합니다.
+- `Managed`가 없는 Il2Cpp 게임에서는 `GameAssembly.dll`, `global-metadata.dat`, `Il2CppDumper`가 필요합니다.
