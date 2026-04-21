@@ -138,11 +138,10 @@ public class FontScanner
             catch { }
         }
 
-        bool verbose = displayName.Contains("font", StringComparison.OrdinalIgnoreCase);
         foreach (var (idx, inst) in instances)
         {
-            try { ScanInstance(am, inst, $"{displayName}/{dirInfos[idx].Name}", entries, verbose); }
-            catch (Exception ex) { if (verbose) Console.Error.WriteLine($"  [DIAG] ScanInstance error: {ex.Message}"); }
+            try { ScanInstance(am, inst, $"{displayName}/{dirInfos[idx].Name}", entries); }
+            catch { }
         }
     }
 
