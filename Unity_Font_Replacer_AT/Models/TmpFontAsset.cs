@@ -16,6 +16,9 @@ public class TmpFontAsset
     // 신 스키마 글리프/캐릭터 테이블
     public List<TmpGlyphNew>? GlyphTable { get; set; }
     public List<TmpCharacterNew>? CharacterTable { get; set; }
+    public List<TmpGlyphRect>? UsedGlyphRects { get; set; }
+    public List<TmpGlyphRect>? FreeGlyphRects { get; set; }
+    public List<TmpFontWeightPair>? FontWeightTable { get; set; }
 
     // 구 스키마 글리프 리스트
     public List<TmpGlyphOld>? GlyphInfoList { get; set; }
@@ -37,4 +40,20 @@ public class TmpFontAsset
     public int GlyphCount => SchemaVersion == TmpSchemaVersion.New
         ? (GlyphTable?.Count ?? 0)
         : (GlyphInfoList?.Count ?? 0);
+}
+
+public class TmpGlyphRect
+{
+    public int X { get; set; }
+    public int Y { get; set; }
+    public int Width { get; set; }
+    public int Height { get; set; }
+}
+
+public class TmpFontWeightPair
+{
+    public int RegularTypefaceFileId { get; set; }
+    public long RegularTypefacePathId { get; set; }
+    public int ItalicTypefaceFileId { get; set; }
+    public long ItalicTypefacePathId { get; set; }
 }

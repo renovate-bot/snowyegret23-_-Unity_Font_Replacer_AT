@@ -95,7 +95,7 @@ public static class MakeSdfCommand
         return (4096, 4096);
     }
 
-    private static int[] LoadCharset(string charset)
+    public static int[] LoadCharset(string? charset)
     {
         var raw = string.IsNullOrWhiteSpace(charset)
             ? DefaultCharsetArgument

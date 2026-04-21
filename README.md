@@ -12,6 +12,7 @@ Unity 게임의 TTF 폰트와 TextMeshPro(TMP) SDF 폰트를 스캔, 교체, 추
 
 - TTF `Font` 에셋 교체
 - TMP `MonoBehaviour` / atlas / material 교체
+- 단일 TTF 입력으로 패딩별 SDF를 자동 생성하는 `oneshot`
 - `Managed` 폴더가 없는 Il2Cpp 게임에서 더미 DLL 자동 생성
 - `parse` + `list` 기반 JSON 매핑 작업
 - TMP 폰트 추출 (`export`)
@@ -59,6 +60,13 @@ UnityFontReplacer_KO.exe batch --gamepath "D:\Games\MyGame" --font mulmaru
 UnityFontReplacer_EN.exe batch --gamepath "D:\Games\MyGame" --font nanumgothic --sdfonly
 ```
 
+### 단일 TTF 원샷 교체
+
+```bat
+UnityFontReplacer_KO.exe oneshot --gamepath "D:\Games\MyGame" --font ".\NanumMyongjo.ttf"
+UnityFontReplacer_EN.exe oneshot --gamepath "D:\Games\MyGame" --font "NanumGothic.ttf" --sdfonly
+```
+
 ### 폰트 매핑 JSON 생성
 
 ```bat
@@ -94,6 +102,7 @@ UnityFontReplacer_KO.exe makesdf --ttf ".\MyFont.ttf"
 | 명령 | 설명 |
 |------|------|
 | `batch` | 내장 폰트 또는 사용자 폰트 폴더로 일괄 교체 |
+| `oneshot` | 단일 TTF로 TTF 교체 + 패딩별 TMP SDF 자동 생성 후 일괄 교체 |
 | `parse` | 게임 폰트 정보를 JSON으로 저장 |
 | `list` | JSON 매핑 파일 기준 개별 교체 |
 | `export` | TMP 폰트 데이터를 `exported_fonts/`로 추출 |
@@ -128,6 +137,29 @@ UnityFontReplacer_KO.exe batch --gamepath "D:\Games\MyGame" --font mulmaru --ps5
 - `.json`: SDF 소스로 사용
 
 내장 폰트는 원본 `atlas padding`에 가장 가까운 `Padding_5`, `Padding_7`, `Padding_15` 프리셋을 자동 선택합니다.
+
+## `oneshot` 사용법
+
+```bat
+UnityFontReplacer_KO.exe oneshot --gamepath "D:\Games\MyGame" --font ".\NanumMyongjo.ttf"
+UnityFontReplacer_KO.exe oneshot --gamepath "D:\Games\MyGame" --font "NanumGothic.ttf" --sdfonly
+UnityFontReplacer_KO.exe oneshot --gamepath "D:\Games\MyGame" --font ".\NanumMyongjo.ttf" --ttfonly
+UnityFontReplacer_KO.exe oneshot --gamepath "D:\Games\MyGame" --font ".\NanumMyongjo.ttf" --output-only "D:\output"
+```
+
+### 주요 옵션
+
+| 옵션 | 설명 |
+|------|------|
+| `--gamepath`, `-g` | 게임 루트 또는 `_Data` / `Data` 폴더 경로 |
+| `--font`, `-f` | 입력 TTF/OTF 파일 경로 또는 해석 가능한 폰트 이름 |
+| `--sdfonly` | TMP SDF만 교체 |
+| `--ttfonly` | TTF만 교체 |
+| `--output-only <dir>` | 원본 대신 수정본만 별도 폴더에 저장 |
+| `--ps5-swizzle` | PS5 atlas swizzle 처리 |
+
+`oneshot`은 입력한 TTF를 일반 `Font` 교체에 그대로 사용하고, 스캔된 TMP 폰트들의 원본 `atlas padding` 값마다 SDF 세트를 자동 생성한 뒤 해당 padding에 맞춰 일괄 교체합니다.  
+SDF 자동 생성에는 기본적으로 `CharList_3911.txt`가 사용됩니다.
 
 ## `parse` + `list` 워크플로
 

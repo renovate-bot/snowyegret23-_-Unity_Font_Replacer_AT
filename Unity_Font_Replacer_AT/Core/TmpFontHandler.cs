@@ -50,6 +50,8 @@ public static class TmpFontHandler
         AssetTypeValueField baseField,
         TmpSchemaVersion targetSchema)
     {
+        var atlasRef = ReadAtlasRef(baseField);
+        var materialRef = ReadMaterialRef(baseField);
         bool hasNewFields = HasNewSchemaFields(baseField);
         bool hasOldFields = HasOldSchemaFields(baseField);
 
@@ -58,6 +60,10 @@ public static class TmpFontHandler
         if (hasOldFields || targetSchema == TmpSchemaVersion.Old)
             WriteOldSchema(source, baseField);
 
+        SyncAtlasReferences(baseField, atlasRef.FileId, atlasRef.PathId);
+        SyncMaterialReference(baseField, materialRef.FileId, materialRef.PathId);
+        SyncGlyphRects(source, baseField);
+        SyncFontWeightTable(source, baseField);
         SyncCreationSettings(source, baseField);
         SyncGlyphIndexLists(source, baseField);
         SetDirtyFlags(baseField);
@@ -132,21 +138,13 @@ public static class TmpFontHandler
                 asset.GlyphInfoList.Add(ReadGlyphOld(g));
         }
 
-        var atlas = bf["atlas"];
-        if (!atlas.IsDummy)
-        {
-            asset.AtlasTextureFileId = atlas["m_FileID"].AsInt;
-            asset.AtlasTexturePathId = atlas["m_PathID"].AsLong;
-        }
+        var atlasRef = ReadAtlasRef(bf);
+        asset.AtlasTextureFileId = atlasRef.FileId;
+        asset.AtlasTexturePathId = atlasRef.PathId;
 
-        var mat = bf["material"];
-        if (mat.IsDummy)
-            mat = bf["m_material"];
-        if (!mat.IsDummy)
-        {
-            asset.MaterialFileId = mat["m_FileID"].AsInt;
-            asset.MaterialPathId = mat["m_PathID"].AsLong;
-        }
+        var materialRef = ReadMaterialRef(bf);
+        asset.MaterialFileId = materialRef.FileId;
+        asset.MaterialPathId = materialRef.PathId;
 
         if (asset.FaceInfo != null)
         {
@@ -400,6 +398,76 @@ public static class TmpFontHandler
         SafeSetInt(bf, "m_AtlasRenderMode", source.AtlasRenderMode);
     }
 
+    private static void SyncAtlasReferences(
+        AssetTypeValueField bf,
+        int fileId,
+        long pathId)
+    {
+        var array = GetArrayField(bf, "m_AtlasTextures");
+        if (array != null && array.Children.Count > 0)
+        {
+            var first = array[0];
+            first["m_FileID"].AsInt = fileId;
+            first["m_PathID"].AsLong = pathId;
+        }
+
+        var legacy = bf["atlas"];
+        if (!legacy.IsDummy)
+        {
+            legacy["m_FileID"].AsInt = fileId;
+            legacy["m_PathID"].AsLong = pathId;
+        }
+    }
+
+    private static void SyncMaterialReference(
+        AssetTypeValueField bf,
+        int fileId,
+        long pathId)
+    {
+        foreach (var fieldName in new[] { "m_Material", "material", "m_material" })
+        {
+            var field = bf[fieldName];
+            if (field.IsDummy)
+                continue;
+
+            var fieldFileId = field["m_FileID"];
+            var fieldPathId = field["m_PathID"];
+            if (fieldFileId.IsDummy || fieldPathId.IsDummy)
+                continue;
+
+            fieldFileId.AsInt = fileId;
+            fieldPathId.AsLong = pathId;
+        }
+    }
+
+    private static void SyncGlyphRects(TmpFontAsset source, AssetTypeValueField bf)
+    {
+        WriteGlyphRectArray(bf, "m_UsedGlyphRects", source.UsedGlyphRects);
+        WriteGlyphRectArray(bf, "m_FreeGlyphRects", source.FreeGlyphRects);
+    }
+
+    private static void SyncFontWeightTable(TmpFontAsset source, AssetTypeValueField bf)
+    {
+        var weights = source.FontWeightTable;
+        if (weights == null)
+            return;
+
+        var arr = GetArrayField(bf, "m_FontWeightTable");
+        if (arr == null)
+            return;
+
+        arr.Children.Clear();
+        foreach (var weight in weights)
+        {
+            var elem = ValueBuilder.DefaultValueFieldFromArrayTemplate(arr);
+            elem["regularTypeface"]["m_FileID"].AsInt = weight.RegularTypefaceFileId;
+            elem["regularTypeface"]["m_PathID"].AsLong = weight.RegularTypefacePathId;
+            elem["italicTypeface"]["m_FileID"].AsInt = weight.ItalicTypefaceFileId;
+            elem["italicTypeface"]["m_PathID"].AsLong = weight.ItalicTypefacePathId;
+            arr.Children.Add(elem);
+        }
+    }
+
     private static void SyncCreationSettings(TmpFontAsset source, AssetTypeValueField bf)
     {
         foreach (var key in CreationSettingsKeys)
@@ -473,6 +541,30 @@ public static class TmpFontHandler
         }
     }
 
+    private static void WriteGlyphRectArray(
+        AssetTypeValueField parent,
+        string name,
+        List<TmpGlyphRect>? values)
+    {
+        if (values == null)
+            return;
+
+        var arr = GetArrayField(parent, name);
+        if (arr == null)
+            return;
+
+        arr.Children.Clear();
+        foreach (var value in values)
+        {
+            var elem = ValueBuilder.DefaultValueFieldFromArrayTemplate(arr);
+            elem["m_X"].AsInt = value.X;
+            elem["m_Y"].AsInt = value.Y;
+            elem["m_Width"].AsInt = value.Width;
+            elem["m_Height"].AsInt = value.Height;
+            arr.Children.Add(elem);
+        }
+    }
+
     private static (int FileId, long PathId) ReadAtlasRef(AssetTypeValueField bf)
     {
         var array = GetArrayField(bf, "m_AtlasTextures");
@@ -485,6 +577,25 @@ public static class TmpFontHandler
         var legacy = bf["atlas"];
         if (!legacy.IsDummy)
             return (legacy["m_FileID"].AsInt, legacy["m_PathID"].AsLong);
+
+        return (0, 0);
+    }
+
+    private static (int FileId, long PathId) ReadMaterialRef(AssetTypeValueField bf)
+    {
+        foreach (var fieldName in new[] { "m_Material", "material", "m_material" })
+        {
+            var field = bf[fieldName];
+            if (field.IsDummy)
+                continue;
+
+            var fileId = field["m_FileID"];
+            var pathId = field["m_PathID"];
+            if (fileId.IsDummy || pathId.IsDummy)
+                continue;
+
+            return (fileId.AsInt, pathId.AsLong);
+        }
 
         return (0, 0);
     }

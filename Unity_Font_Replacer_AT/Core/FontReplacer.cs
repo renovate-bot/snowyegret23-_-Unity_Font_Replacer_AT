@@ -582,7 +582,16 @@ public class FontReplacer
             try
             {
                 var baseField = _ctx.Manager.GetBaseField(inst, info);
+                var schemaInfo = TmpSchemaDetector.Inspect(baseField, inst.file.Metadata.UnityVersion);
                 var targetAsset = TmpFontHandler.ReadFromField(baseField);
+                if (targetAsset.AtlasTexturePathId == 0 && schemaInfo.AtlasPathId != 0)
+                {
+                    targetAsset.AtlasTextureFileId = schemaInfo.AtlasFileId;
+                    targetAsset.AtlasTexturePathId = schemaInfo.AtlasPathId;
+                }
+                if (targetAsset.AtlasPadding <= 0 && schemaInfo.AtlasPadding > 0)
+                    targetAsset.AtlasPadding = schemaInfo.AtlasPadding;
+
                 bool forceRaster = ParseBoolFlag(entry.ForceRaster);
                 var sourceData = LoadSdfSourceData(entry.ReplaceTo, targetAsset.AtlasPadding, forceRaster);
                 if (sourceData == null)
@@ -613,7 +622,7 @@ public class FontReplacer
                     continue;
                 }
 
-                var targetSchema = TmpSchemaDetector.Detect(baseField, inst.file.Metadata.UnityVersion);
+                var targetSchema = schemaInfo.Version;
                 TmpFontHandler.WriteToField(sourceData.FontAsset, baseField, targetSchema);
                 info.SetNewData(baseField);
 
@@ -999,6 +1008,27 @@ public class FontReplacer
             Name = json.m_Name ?? "",
             Version = json.m_Version ?? "",
             SchemaVersion = useNewSchema ? TmpSchemaVersion.New : TmpSchemaVersion.Old,
+            UsedGlyphRects = json.m_UsedGlyphRects?.Select(rect => new TmpGlyphRect
+            {
+                X = rect.m_X,
+                Y = rect.m_Y,
+                Width = rect.m_Width,
+                Height = rect.m_Height,
+            }).ToList(),
+            FreeGlyphRects = json.m_FreeGlyphRects?.Select(rect => new TmpGlyphRect
+            {
+                X = rect.m_X,
+                Y = rect.m_Y,
+                Width = rect.m_Width,
+                Height = rect.m_Height,
+            }).ToList(),
+            FontWeightTable = json.m_FontWeightTable?.Select(weight => new TmpFontWeightPair
+            {
+                RegularTypefaceFileId = weight.regularTypeface?.m_FileID ?? 0,
+                RegularTypefacePathId = weight.regularTypeface?.m_PathID ?? 0,
+                ItalicTypefaceFileId = weight.italicTypeface?.m_FileID ?? 0,
+                ItalicTypefacePathId = weight.italicTypeface?.m_PathID ?? 0,
+            }).ToList(),
         };
 
         if (useNewSchema)

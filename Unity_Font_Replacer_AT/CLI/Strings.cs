@@ -41,6 +41,11 @@ public static class Strings
             ["ko"] = "TTF에서 SDF 아틀라스 생성",
             ["en"] = "Generate SDF atlas from TTF",
         },
+        ["cmd_oneshot"] = new()
+        {
+            ["ko"] = "단일 TTF로 TTF/TMP 폰트를 자동 생성 후 일괄 교체",
+            ["en"] = "Replace TTF/TMP fonts from a single TTF with auto-generated SDF assets",
+        },
         ["scan_start"] = new()
         {
             ["ko"] = "폰트 스캔 시작...",

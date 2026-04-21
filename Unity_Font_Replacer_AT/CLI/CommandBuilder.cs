@@ -78,6 +78,7 @@ public static class CommandBuilder
         rootCommand.AddCommand(parseCommand);
         rootCommand.AddCommand(listCommand);
         rootCommand.AddCommand(batchCommand);
+        rootCommand.AddCommand(OneShotCommand.Build(gamePathOption));
         rootCommand.AddCommand(exportCommand);
         rootCommand.AddCommand(makeSdfCommand);
         rootCommand.AddCommand(diagCommand);

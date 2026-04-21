@@ -11,6 +11,7 @@ Unlike the original Python release layout, the C# port exposes its features thro
 
 - Replace Unity `Font` TTF assets
 - Replace TMP `MonoBehaviour`, atlas, and material data
+- `oneshot` mode that auto-generates per-padding TMP SDF assets from a single TTF
 - Auto-generate dummy DLLs for Il2Cpp games when `Managed` is missing
 - JSON-based `parse` + `list` workflow
 - Export TMP font assets with `export`
@@ -58,6 +59,13 @@ UnityFontReplacer_KO.exe batch --gamepath "D:\Games\MyGame" --font mulmaru
 UnityFontReplacer_EN.exe batch --gamepath "D:\Games\MyGame" --font nanumgothic --sdfonly
 ```
 
+### One-shot TTF replacement
+
+```bat
+UnityFontReplacer_EN.exe oneshot --gamepath "D:\Games\MyGame" --font ".\NanumMyongjo.ttf"
+UnityFontReplacer_EN.exe oneshot --gamepath "D:\Games\MyGame" --font "NanumGothic.ttf" --sdfonly
+```
+
 ### Generate font mapping JSON
 
 ```bat
@@ -93,6 +101,7 @@ Output files are written to the current working directory.
 | Command | Description |
 |---------|-------------|
 | `batch` | Bulk replacement using a built-in font or a custom font folder |
+| `oneshot` | Bulk replacement from a single TTF with auto-generated per-padding TMP SDF assets |
 | `parse` | Save detected game font information as JSON |
 | `list` | Replace selected fonts from a JSON mapping |
 | `export` | Export TMP font data into `exported_fonts/` |
@@ -127,6 +136,29 @@ UnityFontReplacer_EN.exe batch --gamepath "D:\Games\MyGame" --font mulmaru --ps5
 - `.json`: TMP SDF source
 
 Built-in presets automatically choose the closest atlas padding variant from `Padding_5`, `Padding_7`, and `Padding_15`.
+
+## `oneshot`
+
+```bat
+UnityFontReplacer_EN.exe oneshot --gamepath "D:\Games\MyGame" --font ".\NanumMyongjo.ttf"
+UnityFontReplacer_EN.exe oneshot --gamepath "D:\Games\MyGame" --font "NanumGothic.ttf" --sdfonly
+UnityFontReplacer_EN.exe oneshot --gamepath "D:\Games\MyGame" --font ".\NanumMyongjo.ttf" --ttfonly
+UnityFontReplacer_EN.exe oneshot --gamepath "D:\Games\MyGame" --font ".\NanumMyongjo.ttf" --output-only "D:\output"
+```
+
+### Important options
+
+| Option | Description |
+|--------|-------------|
+| `--gamepath`, `-g` | Game root or `_Data` / `Data` directory |
+| `--font`, `-f` | Input TTF/OTF path or a resolvable font name |
+| `--sdfonly` | Replace TMP SDF only |
+| `--ttfonly` | Replace TTF only |
+| `--output-only <dir>` | Write modified files to another folder instead of in-place |
+| `--ps5-swizzle` | Enable PS5 atlas swizzle handling |
+
+`oneshot` uses the input TTF directly for Unity `Font` replacement, then auto-generates TMP SDF assets for each original target `atlas padding` value found during the scan and applies those generated assets automatically.  
+The generated SDF data uses `CharList_3911.txt` as the default charset.
 
 ## `parse` + `list` workflow
 

@@ -97,6 +97,9 @@ public class TmpFontAssetJson
     public List<TmpGlyphJson>? m_GlyphTable { get; set; }
     public List<TmpGlyphOldJson>? m_glyphInfoList { get; set; }
     public List<TmpCharacterJson>? m_CharacterTable { get; set; }
+    public List<TmpGlyphRectJson>? m_UsedGlyphRects { get; set; }
+    public List<TmpGlyphRectJson>? m_FreeGlyphRects { get; set; }
+    public List<TmpFontWeightPairJson>? m_FontWeightTable { get; set; }
     public int m_AtlasWidth { get; set; }
     public int m_AtlasHeight { get; set; }
     public int m_AtlasPadding { get; set; }
@@ -195,6 +198,18 @@ public class TmpCharacterJson
     public int m_Unicode { get; set; }
     public int m_GlyphIndex { get; set; }
     public float m_Scale { get; set; } = 1.0f;
+}
+
+public class TmpFontWeightPairJson
+{
+    public TmpPPtrJson? regularTypeface { get; set; }
+    public TmpPPtrJson? italicTypeface { get; set; }
+}
+
+public class TmpPPtrJson
+{
+    public int m_FileID { get; set; }
+    public long m_PathID { get; set; }
 }
 
 public class TmpCreationSettingsJson
