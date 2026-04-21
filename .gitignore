@@ -1,0 +1,35 @@
+## Build outputs
+bin/
+obj/
+out/
+publish/
+classdata.tpk
+
+## NuGet
+*.nupkg
+*.snupkg
+packages/
+
+## IDE
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+## AI / Claude related files
+.claude/
+AGENTS.md
+MEMORY.md
+
+## Misc
+*.log
+*.tmp

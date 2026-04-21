@@ -1,0 +1,111 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>UnityFontReplacer</RootNamespace>
+    <AssemblyName>UnityFontReplacer</AssemblyName>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+    <DefaultUiLang Condition="'$(DefaultUiLang)' == ''">ko</DefaultUiLang>
+    <VariantPublishDir Condition="'$(VariantPublishDir)' == ''">$(MSBuildProjectDirectory)\..\publish\</VariantPublishDir>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(DefaultUiLang)' == 'en'">
+    <DefineConstants>$(DefineConstants);DEFAULT_UI_LANG_EN</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(DefaultUiLang)' != 'en'">
+    <DefineConstants>$(DefineConstants);DEFAULT_UI_LANG_KO</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- AssetsTools.NET submodule references -->
+    <ProjectReference Include="..\AssetsTools.NET\AssetTools.NET\AssetsTools.NET.csproj" />
+    <ProjectReference Include="..\AssetsTools.NET\AssetsTools.NET.Texture\AssetsTools.NET.Texture.csproj" />
+    <ProjectReference Include="..\AssetsTools.NET\AssetsTools.NET.MonoCecil\AssetsTools.NET.MonoCecil.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+    <PackageReference Include="Spectre.Console" Version="0.49.1" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.6" />
+    <PackageReference Include="SixLabors.Fonts" Version="2.0.4" />
+    <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.4" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <Target Name="RemoveUnwantedPublishFiles" BeforeTargets="ComputeFilesToPublish">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(ResolvedFileToPublish.Extension)' == '.pdb' Or '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'AssetsTools.NET.xml'" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="CopyPublishSupportFiles" AfterTargets="Publish">
+    <ItemGroup>
+      <KrAssetsFiles Include="$(MSBuildProjectDirectory)\..\KR_ASSETS\**\*" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(KrAssetsFiles)"
+          DestinationFiles="@(KrAssetsFiles->'$(PublishDir)KR_ASSETS\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\classdata.tpk"
+          DestinationFiles="$(PublishDir)classdata.tpk"
+          Condition="Exists('$(MSBuildProjectDirectory)\..\classdata.tpk')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="PublishLocalizedVariants">
+    <PropertyGroup>
+      <KoStageDir>$(BaseIntermediateOutputPath)variant-publish\ko\</KoStageDir>
+      <EnStageDir>$(BaseIntermediateOutputPath)variant-publish\en\</EnStageDir>
+    </PropertyGroup>
+
+    <RemoveDir Directories="$(KoStageDir);$(EnStageDir)" />
+    <MakeDir Directories="$(KoStageDir);$(EnStageDir);$(VariantPublishDir)" />
+
+    <ItemGroup>
+      <KrAssetsFiles Include="$(MSBuildProjectDirectory)\..\KR_ASSETS\**\*" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(VariantPublishDir)" />
+
+    <MSBuild Projects="$(MSBuildProjectFullPath)"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);DefaultUiLang=ko;PublishDir=$(KoStageDir)" />
+
+    <MSBuild Projects="$(MSBuildProjectFullPath)"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);DefaultUiLang=en;PublishDir=$(EnStageDir)" />
+
+    <Copy SourceFiles="$(KoStageDir)UnityFontReplacer.exe"
+          DestinationFiles="$(VariantPublishDir)UnityFontReplacer_KO.exe" />
+
+    <Copy SourceFiles="$(EnStageDir)UnityFontReplacer.exe"
+          DestinationFiles="$(VariantPublishDir)UnityFontReplacer_EN.exe" />
+
+    <Copy SourceFiles="@(KrAssetsFiles)"
+          DestinationFiles="@(KrAssetsFiles->'$(VariantPublishDir)KR_ASSETS\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\classdata.tpk"
+          DestinationFiles="$(VariantPublishDir)classdata.tpk"
+          Condition="Exists('$(MSBuildProjectDirectory)\..\classdata.tpk')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>
