@@ -101,6 +101,41 @@ public static class EdtCalculator
         return result;
     }
 
+    public static byte[,] ResampleBilinear(byte[,] source, int targetWidth, int targetHeight)
+    {
+        int sourceHeight = source.GetLength(0);
+        int sourceWidth = source.GetLength(1);
+
+        if (sourceWidth == targetWidth && sourceHeight == targetHeight)
+            return (byte[,])source.Clone();
+
+        var result = new byte[targetHeight, targetWidth];
+        float scaleX = (float)sourceWidth / targetWidth;
+        float scaleY = (float)sourceHeight / targetHeight;
+
+        for (int y = 0; y < targetHeight; y++)
+        {
+            float sourceY = ((y + 0.5f) * scaleY) - 0.5f;
+            int y0 = Math.Clamp((int)MathF.Floor(sourceY), 0, sourceHeight - 1);
+            int y1 = Math.Clamp(y0 + 1, 0, sourceHeight - 1);
+            float ty = sourceY - y0;
+
+            for (int x = 0; x < targetWidth; x++)
+            {
+                float sourceX = ((x + 0.5f) * scaleX) - 0.5f;
+                int x0 = Math.Clamp((int)MathF.Floor(sourceX), 0, sourceWidth - 1);
+                int x1 = Math.Clamp(x0 + 1, 0, sourceWidth - 1);
+                float tx = sourceX - x0;
+
+                float top = Lerp(source[y0, x0], source[y0, x1], tx);
+                float bottom = Lerp(source[y1, x0], source[y1, x1], tx);
+                result[y, x] = (byte)Math.Clamp(MathF.Round(Lerp(top, bottom, ty)), 0, 255);
+            }
+        }
+
+        return result;
+    }
+
     /// <summary>
     /// 1D 제곱 유클리드 거리 변환 (Felzenszwalb/Huttenlocher).
     /// f[i]를 in-place로 변환: f[q] = min_p (f[p] + (q-p)^2)
@@ -150,5 +185,10 @@ public static class EdtCalculator
         }
 
         Array.Copy(d, f, n);
+    }
+
+    private static float Lerp(float a, float b, float t)
+    {
+        return a + ((b - a) * t);
     }
 }

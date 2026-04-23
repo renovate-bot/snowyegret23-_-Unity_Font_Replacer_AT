@@ -4,6 +4,7 @@ using AssetsTools.NET.Extra;
 using Spectre.Console;
 using UnityFontReplacer.CLI;
 using UnityFontReplacer.Models;
+using UnityFontReplacer.SDF;
 
 namespace UnityFontReplacer.Core;
 
@@ -22,10 +23,17 @@ public class FontReplacer
     private readonly Dictionary<string, string> _cabToBundlePath =
         new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly Dictionary<(string ttfPath, int padding, bool rasterMode), string> _generatedSdfDirCache =
+        new();
+
+    private int[]? _defaultCharset;
+    private string? _generatedSdfRoot;
+
     private sealed class DeferredTextureReplacement
     {
         public required string AtlasPngPath { get; init; }
         public required MaterialPatchPlan MaterialFallbackPlan { get; init; }
+        public TextureFilterMode? FilterMode { get; init; }
     }
 
     private sealed class StandaloneSdfMirrorPatch
@@ -34,6 +42,7 @@ public class FontReplacer
         public required string AtlasPngPath { get; init; }
         public required MaterialPatchPlan MaterialPlan { get; init; }
         public required HashSet<string> TextureNameCandidates { get; init; }
+        public TextureFilterMode? FilterMode { get; init; }
     }
 
     public FontReplacer(AssetsContext ctx)
@@ -76,54 +85,64 @@ public class FontReplacer
 
     public int ReplaceFromMapping(FontMapping mapping, string? outputDir = null)
     {
-        int replacedCount = 0;
-        var resolved = GamePathResolver.Resolve(mapping.GamePath);
-        if (resolved == null)
-            return 0;
+        _pendingCrossBundleTextures.Clear();
+        _pendingCrossBundleMaterials.Clear();
 
-        var byPhysicalFile = new Dictionary<string, List<FontEntry>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var entry in mapping.Fonts.Values.Where(e => !string.IsNullOrWhiteSpace(e.ReplaceTo)))
+        try
         {
-            var filePath = FindAssetFile(resolved.AssetFiles, entry.File);
-            if (filePath == null)
+            int replacedCount = 0;
+            var resolved = GamePathResolver.Resolve(mapping.GamePath);
+            if (resolved == null)
+                return 0;
+
+            var byPhysicalFile = new Dictionary<string, List<FontEntry>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in mapping.Fonts.Values.Where(e => !string.IsNullOrWhiteSpace(e.ReplaceTo)))
             {
-                AnsiConsole.MarkupLine($"[yellow]File not found: {Markup.Escape(entry.File)}[/]");
-                continue;
+                var filePath = FindAssetFile(resolved.AssetFiles, entry.File);
+                if (filePath == null)
+                {
+                    AnsiConsole.MarkupLine($"[yellow]File not found: {Markup.Escape(entry.File)}[/]");
+                    continue;
+                }
+
+                if (!byPhysicalFile.TryGetValue(filePath, out var bucket))
+                {
+                    bucket = [];
+                    byPhysicalFile[filePath] = bucket;
+                }
+
+                bucket.Add(entry);
             }
 
-            if (!byPhysicalFile.TryGetValue(filePath, out var bucket))
+            foreach (var (filePath, entries) in byPhysicalFile)
             {
-                bucket = [];
-                byPhysicalFile[filePath] = bucket;
+                try
+                {
+                    var count = ReplaceResolvedFile(filePath, entries, resolved.DataPath, outputDir);
+                    replacedCount += count;
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLine($"[red]Error processing {Markup.Escape(Path.GetFileName(filePath))}: {Markup.Escape(ex.Message)}[/]");
+                }
             }
 
-            bucket.Add(entry);
+            _ctx.Manager.UnloadAll(false);
+            ReplaceStandaloneSdfMirrors(mapping, outputDir);
+            _ctx.Manager.UnloadAll(false);
+
+            if (_pendingCrossBundleTextures.Count > 0 || _pendingCrossBundleMaterials.Count > 0)
+            {
+                AnsiConsole.MarkupLine($"[cyan]Cross-file: {_pendingCrossBundleTextures.Count} textures, {_pendingCrossBundleMaterials.Count} materials[/]");
+                replacedCount += ExecuteCrossBundleReplacements(outputDir, mapping.GamePath);
+            }
+
+            return replacedCount;
         }
-
-        foreach (var (filePath, entries) in byPhysicalFile)
+        finally
         {
-            try
-            {
-                var count = ReplaceResolvedFile(filePath, entries, resolved.DataPath, outputDir);
-                replacedCount += count;
-            }
-            catch (Exception ex)
-            {
-                AnsiConsole.MarkupLine($"[red]Error processing {Markup.Escape(Path.GetFileName(filePath))}: {Markup.Escape(ex.Message)}[/]");
-            }
+            CleanupGeneratedSdfAssets();
         }
-
-        _ctx.Manager.UnloadAll(false);
-        ReplaceStandaloneSdfMirrors(mapping, outputDir);
-        _ctx.Manager.UnloadAll(false);
-
-        if (_pendingCrossBundleTextures.Count > 0 || _pendingCrossBundleMaterials.Count > 0)
-        {
-            AnsiConsole.MarkupLine($"[cyan]Cross-file: {_pendingCrossBundleTextures.Count} textures, {_pendingCrossBundleMaterials.Count} materials[/]");
-            replacedCount += ExecuteCrossBundleReplacements(outputDir, mapping.GamePath);
-        }
-
-        return replacedCount;
     }
 
     private int ExecuteCrossBundleReplacements(string? outputDir, string gamePath)
@@ -267,7 +286,7 @@ public class FontReplacer
             if (texInfo == null)
                 continue;
 
-            TextureHandler.ReplaceFromPng(am, inst, texInfo, kv.Value.AtlasPngPath);
+            TextureHandler.ReplaceFromPng(am, inst, texInfo, kv.Value.AtlasPngPath, kv.Value.FilterMode);
             PatchAllMaterialsReferencingTexture(
                 am,
                 inst,
@@ -347,6 +366,7 @@ public class FontReplacer
                 AtlasPngPath = sourceData.AtlasPngPath!,
                 MaterialPlan = CreateMaterialPlan(sourceData, entry.AtlasPadding, forceRaster, includeSourceMaterial: true),
                 TextureNameCandidates = BuildStandaloneTextureNameCandidates(entry.Name),
+                FilterMode = sourceData.TextureFilterMode,
             });
         }
 
@@ -437,7 +457,7 @@ public class FontReplacer
                 if (patch == null)
                     continue;
 
-                TextureHandler.ReplaceFromPng(_ctx.Manager, inst, texInfo, patch.AtlasPngPath);
+                TextureHandler.ReplaceFromPng(_ctx.Manager, inst, texInfo, patch.AtlasPngPath, patch.FilterMode);
                 matchedTextures.Add((texInfo.PathId, textureName, patch));
                 count++;
                 AnsiConsole.MarkupLine($"[green]Standalone atlas replaced: {Markup.Escape(textureName)}[/]");
@@ -631,7 +651,7 @@ public class FontReplacer
 
                 if (textureLocalInfo != null)
                 {
-                    TextureHandler.ReplaceFromPng(_ctx.Manager, inst, textureLocalInfo, sourceData.AtlasPngPath!);
+                    TextureHandler.ReplaceFromPng(_ctx.Manager, inst, textureLocalInfo, sourceData.AtlasPngPath!, sourceData.TextureFilterMode);
                     if (!hasExactLocalMaterial)
                     {
                         PatchAllMaterialsReferencingTexture(
@@ -649,6 +669,7 @@ public class FontReplacer
                         {
                             AtlasPngPath = sourceData.AtlasPngPath!,
                             MaterialFallbackPlan = atlasFallbackPlan,
+                            FilterMode = sourceData.TextureFilterMode,
                         };
                     atlasReplaced = true;
                 }
@@ -720,7 +741,7 @@ public class FontReplacer
         return TextureHandler.FindTextureByPathId(inst, targetAsset.AtlasTexturePathId);
     }
 
-    private static SdfSourceData? LoadSdfSourceData(
+    private SdfSourceData? LoadSdfSourceData(
         string sourcePath,
         int targetPaddingHint,
         bool preferRaster)
@@ -733,6 +754,13 @@ public class FontReplacer
 
         if (Directory.Exists(sourcePath))
             return LoadFromDirectory(sourcePath, Path.GetFileName(sourcePath), preferRaster);
+
+        if (LooksLikeFontFileInput(sourcePath))
+        {
+            var generatedData = GenerateSdfSourceFromTtf(sourcePath, targetPaddingHint, preferRaster);
+            if (generatedData != null)
+                return generatedData;
+        }
 
         if (File.Exists(sourcePath))
             return LoadFromDirectory(Path.GetDirectoryName(sourcePath)!, Path.GetFileNameWithoutExtension(sourcePath), preferRaster);
@@ -764,6 +792,78 @@ public class FontReplacer
         }
 
         return null;
+    }
+
+    private SdfSourceData? GenerateSdfSourceFromTtf(
+        string ttfSource,
+        int targetPaddingHint,
+        bool preferRaster)
+    {
+        var ttfPath = TtfFontHandler.ResolveTtfPath(ttfSource);
+        if (ttfPath == null)
+            return null;
+
+        int padding = NormalizePadding(targetPaddingHint);
+        var cacheKey = (ttfPath, padding, preferRaster);
+        if (_generatedSdfDirCache.TryGetValue(cacheKey, out var cachedDir) && Directory.Exists(cachedDir))
+            return LoadFromDirectory(cachedDir, Path.GetFileNameWithoutExtension(ttfPath), preferRaster);
+
+        int[] unicodes;
+        try
+        {
+            unicodes = _defaultCharset ??= MakeSdfCommand.LoadCharset(MakeSdfCommand.DefaultCharsetArgument);
+        }
+        catch (FileNotFoundException ex)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
+            return null;
+        }
+
+        if (unicodes.Length == 0)
+        {
+            AnsiConsole.MarkupLine("[red]Default charset is empty.[/]");
+            return null;
+        }
+
+        var generatedRoot = EnsureGeneratedSdfRoot();
+        var fontBaseName = Path.GetFileNameWithoutExtension(ttfPath);
+        var modeSuffix = preferRaster ? "raster" : "sdf";
+        var outputDir = Path.Combine(generatedRoot, $"{SanitizePathSegment(fontBaseName)}_{modeSuffix}_padding_{padding}");
+        Directory.CreateDirectory(outputDir);
+
+        byte[] ttfData;
+        try
+        {
+            ttfData = File.ReadAllBytes(ttfPath);
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]Failed to read TTF: {Markup.Escape(ex.Message)}[/]");
+            return null;
+        }
+
+        AnsiConsole.MarkupLine($"[cyan]Generating SDF from TTF: {Markup.Escape(Path.GetFileName(ttfPath))} (padding {padding})[/]");
+        var result = SdfGenerator.Generate(
+            ttfData,
+            unicodes,
+            atlasWidth: 4096,
+            atlasHeight: 4096,
+            padding: padding,
+            pointSize: 0,
+            rasterMode: preferRaster,
+            filterMode: TextureFilterMode.Bilinear);
+
+        try
+        {
+            SdfGenerator.SaveToFiles(result, outputDir, fontBaseName);
+        }
+        finally
+        {
+            result.AtlasImage.Dispose();
+        }
+
+        _generatedSdfDirCache[cacheKey] = outputDir;
+        return LoadFromDirectory(outputDir, fontBaseName, preferRaster);
     }
 
     private static HashSet<string> BuildStandaloneTextureNameCandidates(string fontName)
@@ -956,6 +1056,58 @@ public class FontReplacer
         return false;
     }
 
+    private static bool LooksLikeFontFileInput(string sourcePath)
+    {
+        var trimmed = sourcePath.Trim().Trim('"');
+        return trimmed.EndsWith(".ttf", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.EndsWith(".otf", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int NormalizePadding(int padding)
+    {
+        return padding > 0 ? padding : 7;
+    }
+
+    private string EnsureGeneratedSdfRoot()
+    {
+        _generatedSdfRoot ??= Path.Combine(
+            Path.GetTempPath(),
+            "UnityFontReplacer_ListSdf",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_generatedSdfRoot);
+        return _generatedSdfRoot;
+    }
+
+    private void CleanupGeneratedSdfAssets()
+    {
+        _generatedSdfDirCache.Clear();
+        _defaultCharset = null;
+
+        var generatedRoot = _generatedSdfRoot;
+        _generatedSdfRoot = null;
+        if (string.IsNullOrWhiteSpace(generatedRoot) || !Directory.Exists(generatedRoot))
+            return;
+
+        try
+        {
+            Directory.Delete(generatedRoot, recursive: true);
+        }
+        catch
+        {
+        }
+    }
+
+    private static string SanitizePathSegment(string value)
+    {
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var chars = value
+            .Trim()
+            .Select(ch => invalidChars.Contains(ch) ? '_' : ch)
+            .ToArray();
+        var sanitized = new string(chars).Trim();
+        return sanitized.Length == 0 ? "font" : sanitized;
+    }
+
     private static SdfSourceData? LoadFromJson(string jsonPath)
     {
         var json = File.ReadAllText(jsonPath);
@@ -987,11 +1139,16 @@ public class FontReplacer
         if (File.Exists(materialCandidate))
             materialPath = materialCandidate;
 
+        TextureFilterMode? filterMode = null;
+        if (TextureFilterModeParser.TryParse(fontAssetJson.texture_filter_mode, out var parsedFilterMode))
+            filterMode = parsedFilterMode;
+
         return new SdfSourceData
         {
             FontAsset = ConvertFromJson(fontAssetJson),
             AtlasPngPath = atlasPng,
             Material = materialPath != null ? LoadMaterialSourceData(materialPath) : null,
+            TextureFilterMode = filterMode,
         };
     }
 

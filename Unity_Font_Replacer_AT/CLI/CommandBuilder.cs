@@ -48,17 +48,19 @@ public static class CommandBuilder
         var pointSizeOption = new Option<int>("--point-size", () => 0, "Point size (0=auto)");
         var paddingOption = new Option<int>("--padding", () => 7, "Atlas padding");
         var charsetOption = new Option<string>("--charset", () => MakeSdfCommand.DefaultCharsetArgument, "Charset file or literal");
-        var renderModeOption = new Option<string>("--rendermode", () => "sdf", "sdf or raster");
+        var renderModeOption = new Option<string>("--rendermode", () => "sdf", "sdf / raster");
+        var filterModeOption = new Option<string>("--filter-mode", () => "bilinear", "point / bilinear / trilinear");
         makeSdfCommand.AddOption(ttfOption);
         makeSdfCommand.AddOption(atlasSizeOption);
         makeSdfCommand.AddOption(pointSizeOption);
         makeSdfCommand.AddOption(paddingOption);
         makeSdfCommand.AddOption(charsetOption);
         makeSdfCommand.AddOption(renderModeOption);
-        makeSdfCommand.SetHandler(async (ttf, atlasSize, pointSize, padding, charset, renderMode) =>
+        makeSdfCommand.AddOption(filterModeOption);
+        makeSdfCommand.SetHandler(async (ttf, atlasSize, pointSize, padding, charset, renderMode, filterMode) =>
         {
-            await MakeSdfCommand.ExecuteAsync(ttf, atlasSize, pointSize, padding, charset, renderMode);
-        }, ttfOption, atlasSizeOption, pointSizeOption, paddingOption, charsetOption, renderModeOption);
+            await MakeSdfCommand.ExecuteAsync(ttf, atlasSize, pointSize, padding, charset, renderMode, filterMode);
+        }, ttfOption, atlasSizeOption, pointSizeOption, paddingOption, charsetOption, renderModeOption, filterModeOption);
 
         // batch subcommand
         var batchCommand = BatchCommand.Build(gamePathOption);

@@ -3,6 +3,7 @@ using AssetsTools.NET.Extra;
 using AssetsTools.NET.Texture;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using UnityFontReplacer.Models;
 
 namespace UnityFontReplacer.Core;
 
@@ -28,7 +29,8 @@ public static class TextureHandler
     /// </summary>
     public static void ReplaceFromPng(
         AssetsManager am, AssetsFileInstance inst,
-        AssetFileInfo texInfo, string pngPath)
+        AssetFileInfo texInfo, string pngPath,
+        TextureFilterMode? filterMode = null)
     {
         var baseField = am.GetBaseField(inst, texInfo);
         var texFile = TextureFile.ReadTextureFile(baseField);
@@ -44,13 +46,14 @@ public static class TextureHandler
         if (originalFormat == 1) // Alpha8
         {
             // PNG에서 알파 채널만 추출하여 raw Alpha8 바이트로 교체
-            ReplaceAsAlpha8(texFile, baseField, texInfo, pngPath);
+            ReplaceAsAlpha8(texFile, baseField, texInfo, pngPath, filterMode);
         }
         else
         {
             // 일반 포맷: EncodeTextureImage 사용
             texFile.EncodeTextureImage(pngPath, quality: 3);
             texFile.WriteTo(baseField);
+            ApplyFilterMode(baseField, filterMode);
             texInfo.SetNewData(baseField);
         }
     }
@@ -61,7 +64,8 @@ public static class TextureHandler
     /// </summary>
     private static void ReplaceAsAlpha8(
         TextureFile texFile, AssetTypeValueField baseField,
-        AssetFileInfo texInfo, string pngPath)
+        AssetFileInfo texInfo, string pngPath,
+        TextureFilterMode? filterMode)
     {
         using var image = Image.Load<Rgba32>(pngPath);
         int w = image.Width;
@@ -85,6 +89,7 @@ public static class TextureHandler
         texFile.SetPictureData(alpha8, w, h);
         texFile.m_TextureFormat = 1; // Alpha8 유지
         texFile.WriteTo(baseField);
+        ApplyFilterMode(baseField, filterMode);
         texInfo.SetNewData(baseField);
     }
 
@@ -112,5 +117,21 @@ public static class TextureHandler
         var baseField = am.GetBaseField(inst, texInfo);
         var texFile = TextureFile.ReadTextureFile(baseField);
         return (texFile.m_Width, texFile.m_Height, texFile.m_TextureFormat);
+    }
+
+    private static void ApplyFilterMode(AssetTypeValueField baseField, TextureFilterMode? filterMode)
+    {
+        if (!filterMode.HasValue)
+            return;
+
+        var textureSettings = baseField["m_TextureSettings"];
+        if (textureSettings.IsDummy)
+            return;
+
+        var filterField = textureSettings["m_FilterMode"];
+        if (filterField.IsDummy)
+            return;
+
+        filterField.AsInt = (int)filterMode.Value;
     }
 }

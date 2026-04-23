@@ -1,4 +1,5 @@
 using SixLabors.Fonts;
+using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Drawing.Processing;
 
@@ -75,11 +76,34 @@ public class GlyphRenderer : IDisposable
     /// </summary>
     public byte[,] RenderGlyphBitmap(int unicode, float pointSize, int padding, out int offsetX, out int offsetY)
     {
+        return RenderGlyphBitmapInternal(unicode, pointSize, padding, out offsetX, out offsetY);
+    }
+
+    public byte[,] RenderGlyphBitmapSupersampled(int unicode, float pointSize, int padding, int supersample)
+    {
+        supersample = Math.Max(1, supersample);
+        return RenderGlyphBitmapInternal(
+            unicode,
+            pointSize * supersample,
+            padding * supersample,
+            out _,
+            out _);
+    }
+
+    public void GetGlyphBitmapBounds(int unicode, float pointSize, int padding, out int width, out int height, out int offsetX, out int offsetY)
+    {
+        var bounds = MeasureGlyphBounds(unicode, pointSize);
+        width = (int)MathF.Ceiling(bounds.Width) + padding * 2;
+        height = (int)MathF.Ceiling(bounds.Height) + padding * 2;
+        offsetX = (int)MathF.Floor(bounds.X);
+        offsetY = (int)MathF.Floor(bounds.Y);
+    }
+
+    private byte[,] RenderGlyphBitmapInternal(int unicode, float pointSize, int padding, out int offsetX, out int offsetY)
+    {
         var font = _family.CreateFont(pointSize);
         var ch = char.ConvertFromUtf32(unicode);
-        var options = new TextOptions(font);
-
-        var bounds = TextMeasurer.MeasureBounds(ch, options);
+        var bounds = MeasureGlyphBounds(unicode, pointSize);
 
         int bmpW = (int)MathF.Ceiling(bounds.Width) + padding * 2;
         int bmpH = (int)MathF.Ceiling(bounds.Height) + padding * 2;
@@ -113,6 +137,15 @@ public class GlyphRenderer : IDisposable
         });
 
         return bitmap;
+    }
+
+    private RectangleF MeasureGlyphBounds(int unicode, float pointSize)
+    {
+        var font = _family.CreateFont(pointSize);
+        var ch = char.ConvertFromUtf32(unicode);
+        var options = new TextOptions(font);
+        var bounds = TextMeasurer.MeasureBounds(ch, options);
+        return new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height);
     }
 
     public void Dispose()

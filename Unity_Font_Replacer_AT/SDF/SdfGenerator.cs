@@ -11,10 +11,13 @@ namespace UnityFontReplacer.SDF;
 /// </summary>
 public static class SdfGenerator
 {
+    private const int SdffaaSupersample = 4;
+
     public record SdfResult(
         TmpFontAsset FontAsset,
         Image<Rgba32> AtlasImage,
-        Dictionary<string, float> MaterialProperties);
+        Dictionary<string, float> MaterialProperties,
+        TextureFilterMode FilterMode);
 
     /// <summary>
     /// TTF 바이트에서 SDF 에셋을 생성한다.
@@ -25,7 +28,8 @@ public static class SdfGenerator
         int atlasWidth = 4096, int atlasHeight = 4096,
         int padding = 7,
         int pointSize = 0,
-        bool rasterMode = false)
+        bool rasterMode = false,
+        TextureFilterMode filterMode = TextureFilterMode.Bilinear)
     {
         using var renderer = new GlyphRenderer(ttfData);
 
@@ -50,6 +54,15 @@ public static class SdfGenerator
             throw new InvalidOperationException($"Failed to pack glyphs at point size {resolvedSize}");
 
         var placementMap = placements.ToDictionary(p => p.Id);
+        var usedGlyphRects = placements
+            .Select(p => new TmpGlyphRect
+            {
+                X = p.X,
+                Y = p.Y,
+                Width = p.Width,
+                Height = p.Height,
+            })
+            .ToList();
 
         // 3. 아틀라스 이미지 생성 + 글리프 렌더링/SDF 변환
         var atlas = new Image<Rgba32>(atlasWidth, atlasHeight);
@@ -63,20 +76,27 @@ public static class SdfGenerator
             if (!placementMap.TryGetValue(unicode, out var placement))
                 continue;
 
-            // 글리프 비트맵 렌더링
-            var bitmap = renderer.RenderGlyphBitmap(unicode, resolvedSize, padding, out int offX, out int offY);
-            int bmpH = bitmap.GetLength(0);
-            int bmpW = bitmap.GetLength(1);
+            renderer.GetGlyphBitmapBounds(unicode, resolvedSize, padding, out int bmpW, out int bmpH, out int offX, out int offY);
 
             // SDF 또는 래스터 변환
             byte[,] processed;
-            if (!rasterMode)
+            if (rasterMode)
             {
-                processed = EdtCalculator.ComputeSdf(bitmap, Math.Max(1, padding));
+                processed = renderer.RenderGlyphBitmap(unicode, resolvedSize, padding, out _, out _);
             }
             else
             {
-                processed = bitmap;
+                // Unity SDFAA 계열처럼 안티앨리어스 정보를 먼저 충분히 확보한 뒤
+                // 축소 샘플링해 가장자리 계단 현상을 줄인다.
+                var supersampledBitmap = renderer.RenderGlyphBitmapSupersampled(
+                    unicode,
+                    resolvedSize,
+                    padding,
+                    SdffaaSupersample);
+                var supersampledSdf = EdtCalculator.ComputeSdf(
+                    supersampledBitmap,
+                    Math.Max(1, padding * SdffaaSupersample));
+                processed = EdtCalculator.ResampleBilinear(supersampledSdf, bmpW, bmpH);
             }
 
             // 아틀라스에 복사 (alpha 채널)
@@ -152,6 +172,9 @@ public static class SdfGenerator
             },
             GlyphTable = glyphTable,
             CharacterTable = characterTable,
+            UsedGlyphRects = usedGlyphRects,
+            FreeGlyphRects = [],
+            FontWeightTable = [],
             AtlasWidth = atlasWidth,
             AtlasHeight = atlasHeight,
             AtlasPadding = padding,
@@ -166,7 +189,7 @@ public static class SdfGenerator
             ["_TextureHeight"] = atlasHeight,
         };
 
-        return new SdfResult(fontAsset, atlas, materialProps);
+        return new SdfResult(fontAsset, atlas, materialProps, filterMode);
     }
 
     /// <summary>
@@ -183,7 +206,7 @@ public static class SdfGenerator
             WriteIndented = true,
             Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         };
-        var sdfJson = SerializeFontAsset(result.FontAsset);
+        var sdfJson = SerializeFontAsset(result.FontAsset, result.FilterMode);
         File.WriteAllText(jsonPath, JsonSerializer.Serialize(sdfJson, jsonOptions));
 
         // PNG (아틀라스)
@@ -203,10 +226,11 @@ public static class SdfGenerator
         File.WriteAllText(matPath, JsonSerializer.Serialize(matJson, jsonOptions));
     }
 
-    private static TmpFontAssetJson SerializeFontAsset(TmpFontAsset asset)
+    private static TmpFontAssetJson SerializeFontAsset(TmpFontAsset asset, TextureFilterMode filterMode)
     {
         return new TmpFontAssetJson
         {
+            texture_filter_mode = filterMode.ToString(),
             m_FaceInfo = new TmpFaceInfoJson
             {
                 m_FamilyName = asset.FaceInfo.FamilyName,
@@ -254,6 +278,41 @@ public static class SdfGenerator
                 m_Unicode = c.Unicode,
                 m_GlyphIndex = c.GlyphIndex,
                 m_Scale = c.Scale,
+            }).ToList(),
+            m_AtlasTextures =
+            [
+                new TmpPPtrJson
+                {
+                    m_FileID = 0,
+                    m_PathID = 0,
+                },
+            ],
+            m_UsedGlyphRects = asset.UsedGlyphRects?.Select(rect => new TmpGlyphRectJson
+            {
+                m_X = rect.X,
+                m_Y = rect.Y,
+                m_Width = rect.Width,
+                m_Height = rect.Height,
+            }).ToList(),
+            m_FreeGlyphRects = asset.FreeGlyphRects?.Select(rect => new TmpGlyphRectJson
+            {
+                m_X = rect.X,
+                m_Y = rect.Y,
+                m_Width = rect.Width,
+                m_Height = rect.Height,
+            }).ToList(),
+            m_FontWeightTable = asset.FontWeightTable?.Select(weight => new TmpFontWeightPairJson
+            {
+                regularTypeface = new TmpPPtrJson
+                {
+                    m_FileID = weight.RegularTypefaceFileId,
+                    m_PathID = weight.RegularTypefacePathId,
+                },
+                italicTypeface = new TmpPPtrJson
+                {
+                    m_FileID = weight.ItalicTypefaceFileId,
+                    m_PathID = weight.ItalicTypefacePathId,
+                },
             }).ToList(),
             m_AtlasWidth = asset.AtlasWidth,
             m_AtlasHeight = asset.AtlasHeight,

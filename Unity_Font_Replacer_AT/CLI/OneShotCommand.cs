@@ -152,7 +152,8 @@ public static class OneShotCommand
                             atlasHeight: 4096,
                             padding: padding,
                             pointSize: 0,
-                            rasterMode: false);
+                            rasterMode: false,
+                            filterMode: TextureFilterMode.Bilinear);
 
                         try
                         {

@@ -52,6 +52,7 @@ public class SdfSourceData
     public required TmpFontAsset FontAsset { get; init; }
     public string? AtlasPngPath { get; init; }
     public MaterialSourceData? Material { get; init; }
+    public TextureFilterMode? TextureFilterMode { get; init; }
 }
 
 public sealed class MaterialSourceData
@@ -97,6 +98,7 @@ public class TmpFontAssetJson
     public List<TmpGlyphJson>? m_GlyphTable { get; set; }
     public List<TmpGlyphOldJson>? m_glyphInfoList { get; set; }
     public List<TmpCharacterJson>? m_CharacterTable { get; set; }
+    public List<TmpPPtrJson>? m_AtlasTextures { get; set; }
     public List<TmpGlyphRectJson>? m_UsedGlyphRects { get; set; }
     public List<TmpGlyphRectJson>? m_FreeGlyphRects { get; set; }
     public List<TmpFontWeightPairJson>? m_FontWeightTable { get; set; }
@@ -104,6 +106,7 @@ public class TmpFontAssetJson
     public int m_AtlasHeight { get; set; }
     public int m_AtlasPadding { get; set; }
     public int m_AtlasRenderMode { get; set; }
+    public string? texture_filter_mode { get; set; }
     public TmpCreationSettingsJson? m_CreationSettings { get; set; }
     public TmpCreationSettingsJson? m_FontAssetCreationSettings { get; set; }
 }

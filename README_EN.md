@@ -198,6 +198,14 @@ UnityFontReplacer_EN.exe list --gamepath "D:\Games\MyGame" --file ".\MyGame.json
 
 If `Replace_to` is empty, that entry is skipped.
 
+For SDF entries, `Replace_to` supports both of these forms:
+
+- an existing SDF set name or a folder/JSON path under `KR_ASSETS`
+- a TTF/OTF path such as `NanumMyongjo.ttf` or `.\MyFont.otf`
+
+If an SDF entry uses a TTF/OTF in `Replace_to`, `list` behaves like `oneshot` for that entry: it auto-generates a temporary TMP SDF set using that target game's original TMP `atlas padding`, then applies the generated replacement automatically.  
+The default charset is still `CharList_3911.txt`, and the default texture filter mode is `Bilinear`.
+
 ## `export`
 
 ```bat
@@ -220,6 +228,7 @@ UnityFontReplacer_EN.exe makesdf --ttf ".\Mulmaru.ttf"
 UnityFontReplacer_EN.exe makesdf --ttf ".\Mulmaru.ttf" --padding 15
 UnityFontReplacer_EN.exe makesdf --ttf ".\Mulmaru.ttf" --charset ".\charset.txt"
 UnityFontReplacer_EN.exe makesdf --ttf ".\Mulmaru.ttf" --rendermode raster
+UnityFontReplacer_EN.exe makesdf --ttf ".\Mulmaru.ttf" --filter-mode point
 ```
 
 | Option | Description | Default |
@@ -229,7 +238,13 @@ UnityFontReplacer_EN.exe makesdf --ttf ".\Mulmaru.ttf" --rendermode raster
 | `--point-size` | point size (`0` = auto) | `0` |
 | `--padding` | atlas padding | `7` |
 | `--charset` | charset file or literal string | `./CharList_3911.txt` |
-| `--rendermode` | `sdf` or `raster` | `sdf` |
+| `--rendermode` | `sdf` / `raster` | `sdf` |
+| `--filter-mode` | Unity texture filter mode (`point` / `bilinear` / `trilinear`) | `bilinear` |
+
+Default `sdf` generation now uses an internal SDFAA-style path intended for normal text fonts.  
+`raster` remains for pixel-font / non-SDF atlas output.
+
+`makesdf` now saves its generated files automatically under `KR_ASSETS/` in the current working directory.
 
 ## Adding custom fonts
 
@@ -280,3 +295,9 @@ Users download it automatically when the executable starts.
 - `diag` is intended for troubleshooting rather than regular end users.
 - `AssetsTools.NET` is included as a Git submodule and should remain vendor-owned.
 - For Il2Cpp games without `Managed`, `GameAssembly.dll`, `global-metadata.dat`, and the bundled `Il2CppDumper` are required.
+
+## Disclaimer
+
+- This project is an unofficial independent tool and is not affiliated with, endorsed by, or sponsored by Unity Technologies, TextMeshPro, any game developer/publisher, or any font vendor.
+- `Unity`, `TextMeshPro`, and all game/font names remain the property of their respective owners.
+- Users are responsible for checking and complying with each game's terms, font licenses, copyright rules, and applicable laws.

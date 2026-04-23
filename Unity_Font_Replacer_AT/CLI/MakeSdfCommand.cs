@@ -1,4 +1,5 @@
 using Spectre.Console;
+using UnityFontReplacer.Models;
 using UnityFontReplacer.SDF;
 
 namespace UnityFontReplacer.CLI;
@@ -9,7 +10,7 @@ public static class MakeSdfCommand
 
     public static async Task ExecuteAsync(
         string ttf, string atlasSize, int pointSize,
-        int padding, string charset, string renderMode)
+        int padding, string charset, string renderMode, string filterMode)
     {
         await Task.CompletedTask;
 
@@ -45,17 +46,33 @@ public static class MakeSdfCommand
             return;
         }
 
-        bool rasterMode = renderMode.Equals("raster", StringComparison.OrdinalIgnoreCase);
+        var normalizedRenderMode = (renderMode ?? "").Trim().ToLowerInvariant();
+        bool rasterMode = normalizedRenderMode == "raster";
+        bool sdfMode = normalizedRenderMode is "" or "sdf";
+        if (!rasterMode && !sdfMode)
+        {
+            AnsiConsole.MarkupLine($"[red]Invalid render mode: {Markup.Escape(renderMode ?? "")} (sdf / raster)[/]");
+            return;
+        }
+
+        if (!TextureFilterModeParser.TryParse(filterMode, out var resolvedFilterMode))
+        {
+            AnsiConsole.MarkupLine($"[red]Invalid filter mode: {Markup.Escape(filterMode)} (point / bilinear / trilinear)[/]");
+            return;
+        }
+
+        var displayMode = rasterMode ? "Raster" : "SDF";
 
         AnsiConsole.MarkupLine($"Font: [green]{Markup.Escape(fontName)}[/]");
         AnsiConsole.MarkupLine($"Atlas: [green]{aw}x{ah}[/], Padding: [green]{padding}[/]");
-        AnsiConsole.MarkupLine($"Characters: [green]{unicodes.Length}[/], Mode: [green]{(rasterMode ? "Raster" : "SDF")}[/]");
+        AnsiConsole.MarkupLine($"Characters: [green]{unicodes.Length}[/], Mode: [green]{displayMode}[/], Filter: [green]{resolvedFilterMode}[/]");
 
         try
         {
-            var result = SdfGenerator.Generate(ttfData, unicodes, aw, ah, padding, pointSize, rasterMode);
+            var result = SdfGenerator.Generate(ttfData, unicodes, aw, ah, padding, pointSize, rasterMode, resolvedFilterMode);
 
-            var outputDir = Directory.GetCurrentDirectory();
+            var outputDir = Path.Combine(Directory.GetCurrentDirectory(), "KR_ASSETS");
+            Directory.CreateDirectory(outputDir);
             SdfGenerator.SaveToFiles(result, outputDir, fontName);
 
             result.AtlasImage.Dispose();

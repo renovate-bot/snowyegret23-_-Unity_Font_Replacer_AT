@@ -199,6 +199,14 @@ UnityFontReplacer_KO.exe list --gamepath "D:\Games\MyGame" --file ".\MyGame.json
 
 `Replace_to`를 비워두면 해당 항목은 건너뜁니다.
 
+SDF 항목의 `Replace_to`는 아래 둘 다 지원합니다.
+
+- `Mulmaru` 같은 기존 SDF 세트 이름 또는 `KR_ASSETS` 내 폴더/JSON 경로
+- `NanumMyongjo.ttf` / `.\MyFont.otf` 같은 TTF/OTF 경로
+
+SDF 항목의 `Replace_to`에 TTF/OTF를 넣으면 `list`가 `oneshot`처럼 해당 게임 원본 TMP 폰트의 `atlas padding` 값을 사용해 임시 SDF 세트를 자동 생성한 뒤 교체합니다.  
+이때도 기본 문자셋은 `CharList_3911.txt`, 기본 필터 모드는 `Bilinear`입니다.
+
 ## `export`
 
 ```bat
@@ -221,6 +229,7 @@ UnityFontReplacer_KO.exe makesdf --ttf ".\Mulmaru.ttf"
 UnityFontReplacer_KO.exe makesdf --ttf ".\Mulmaru.ttf" --padding 15
 UnityFontReplacer_KO.exe makesdf --ttf ".\Mulmaru.ttf" --charset ".\charset.txt"
 UnityFontReplacer_KO.exe makesdf --ttf ".\Mulmaru.ttf" --rendermode raster
+UnityFontReplacer_KO.exe makesdf --ttf ".\Mulmaru.ttf" --filter-mode point
 ```
 
 | 옵션 | 설명 | 기본값 |
@@ -230,7 +239,13 @@ UnityFontReplacer_KO.exe makesdf --ttf ".\Mulmaru.ttf" --rendermode raster
 | `--point-size` | point size (`0`이면 자동) | `0` |
 | `--padding` | atlas padding | `7` |
 | `--charset` | charset 파일 또는 문자열 | `./CharList_3911.txt` |
-| `--rendermode` | `sdf` 또는 `raster` | `sdf` |
+| `--rendermode` | `sdf` / `raster` | `sdf` |
+| `--filter-mode` | Unity 텍스처 필터 모드 (`point` / `bilinear` / `trilinear`) | `bilinear` |
+
+기본 `sdf` 생성은 일반 텍스트 폰트 기준의 SDFAA 계열 내부 생성 경로를 사용합니다.  
+`raster`는 픽셀 폰트/비-SDF atlas용입니다.
+
+`makesdf` 결과는 현재 작업 폴더의 `KR_ASSETS/` 아래에 자동 저장됩니다.
 
 ## 커스텀 폰트 추가
 
@@ -281,3 +296,9 @@ dotnet msbuild .\Unity_Font_Replacer_AT\UnityFontReplacer.csproj /t:PublishLocal
 - `diag`는 최종 사용자용 기능보다는 문제 분석용입니다.
 - `AssetsTools.NET`은 서브모듈로 포함되며 이 저장소에서 직접 수정하지 않는 것을 전제로 합니다.
 - `Managed`가 없는 Il2Cpp 게임에서는 `GameAssembly.dll`, `global-metadata.dat`, `Il2CppDumper`가 필요합니다.
+
+## 면책
+
+- 이 프로젝트는 비공식 독립 도구이며 Unity Technologies, TextMeshPro, 개별 게임 개발사/배급사, 폰트 제작사와 관계가 없고 승인이나 후원을 받지 않습니다.
+- `Unity`, `TextMeshPro` 및 각 게임/폰트 명칭은 각 권리자의 자산입니다.
+- 사용자는 각 게임의 이용 약관, 폰트 라이선스, 저작권 및 관련 법규를 직접 확인하고 준수해야 합니다.
