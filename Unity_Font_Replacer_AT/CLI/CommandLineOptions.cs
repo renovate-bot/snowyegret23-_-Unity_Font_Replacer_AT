@@ -6,7 +6,7 @@ internal static class CommandLineOptions
 {
     public static Option<string> CreateGamePathOption()
     {
-        return RequiredOption<string>("--gamepath", "Unity game path", "-g");
+        return RequiredOption<string>("--gamepath", "Game path", "-g");
     }
 
     public static Option<T> RequiredOption<T>(string name, string description, params string[] aliases)

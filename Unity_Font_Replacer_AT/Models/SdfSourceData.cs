@@ -5,7 +5,7 @@ namespace UnityFontReplacer.Models;
 
 /// <summary>
 /// JSON에서 int/float/string 어떤 형태로 오든 int로 변환하는 범용 컨버터.
-/// Unity 직렬화 출력이 60.0, 60, "60" 중 어떤 형태든 호환.
+/// 직렬화 출력이 60.0, 60, "60" 중 어떤 형태든 호환.
 /// </summary>
 public class FlexIntConverter : JsonConverter<int>
 {

@@ -20,14 +20,14 @@ public static class TmpSchemaDetector
 
     public static TmpSchemaVersion Detect(
         AssetTypeValueField baseField,
-        string? unityVersion = null)
+        string? engineVersion = null)
     {
-        return Inspect(baseField, unityVersion).Version;
+        return Inspect(baseField, engineVersion).Version;
     }
 
     public static TmpSchemaInfo Inspect(
         AssetTypeValueField baseField,
-        string? unityVersion = null)
+        string? engineVersion = null)
     {
         int newGlyphCount = CountArrayChildren(baseField["m_GlyphTable"]);
         int oldGlyphCount = CountArrayChildren(baseField["m_glyphInfoList"]);
@@ -49,7 +49,7 @@ public static class TmpSchemaDetector
             newAtlasAny.Exists,
             oldAtlasAny.Exists,
             hasNewChars,
-            unityVersion);
+            engineVersion);
 
         int glyphCount;
         int atlasPadding;
@@ -92,7 +92,7 @@ public static class TmpSchemaDetector
         bool hasNewAtlas,
         bool hasOldAtlas,
         bool hasNewChars,
-        string? unityVersion)
+        string? engineVersion)
     {
         if (newGlyphCount > 0 && oldGlyphCount == 0)
             return TmpSchemaVersion.New;
@@ -108,7 +108,7 @@ public static class TmpSchemaDetector
         if (hasNewAtlas != hasOldAtlas)
             return hasNewAtlas ? TmpSchemaVersion.New : TmpSchemaVersion.Old;
 
-        var hint = GetVersionHint(unityVersion);
+        var hint = GetVersionHint(engineVersion);
         if (hint != TmpSchemaVersion.Unknown)
             return hint;
 
@@ -120,12 +120,12 @@ public static class TmpSchemaDetector
         return TmpSchemaVersion.New;
     }
 
-    private static TmpSchemaVersion GetVersionHint(string? unityVersion)
+    private static TmpSchemaVersion GetVersionHint(string? engineVersion)
     {
-        if (string.IsNullOrWhiteSpace(unityVersion))
+        if (string.IsNullOrWhiteSpace(engineVersion))
             return TmpSchemaVersion.Unknown;
 
-        var parts = unityVersion
+        var parts = engineVersion
             .Split(['.', 'f', 'p', 'a', 'b'], StringSplitOptions.RemoveEmptyEntries)
             .Select(token => int.TryParse(token, out var value) ? value : -1)
             .Where(value => value >= 0)

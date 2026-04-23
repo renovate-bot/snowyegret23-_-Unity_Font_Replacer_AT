@@ -11,7 +11,7 @@ public class FontScanner
 
     // 공유 리소스
     private string? _tpkPath;
-    private string? _unityVersion;
+    private string? _engineVersion;
     private IMonoBehaviourTemplateGenerator? _sharedMonoGen;
 
     public FontScanner(AssetsContext ctx)
@@ -22,10 +22,10 @@ public class FontScanner
     public ScanResult ScanAll(List<string> assetFiles, bool detectPs5Swizzle = false, int maxWorkers = 1)
     {
         var result = new ScanResult();
-        result.UnityVersion = _ctx.DetectUnityVersion();
+        result.EngineVersion = _ctx.DetectEngineVersion();
 
         // 공유 리소스 한 번만 로드
-        LoadSharedResources(result.UnityVersion);
+        LoadSharedResources(result.EngineVersion);
 
         using var status = new StatusBar(maxWorkers);
         status.SetTotal(assetFiles.Count);
@@ -72,9 +72,9 @@ public class FontScanner
         return result;
     }
 
-    private void LoadSharedResources(string? unityVersion)
+    private void LoadSharedResources(string? engineVersion)
     {
-        _unityVersion = unityVersion;
+        _engineVersion = engineVersion;
         _tpkPath = ClassDataDownloader.EnsureClassData();
 
         if (_ctx.ManagedPath != null && Directory.Exists(_ctx.ManagedPath))
@@ -93,10 +93,10 @@ public class FontScanner
         am.UseQuickLookup = true;
 
         // ClassDB 로드 (tpk 파일 읽기는 가벼움, 메모리에 누적 안 됨)
-        if (_tpkPath != null && _unityVersion != null)
+        if (_tpkPath != null && _engineVersion != null)
         {
             am.LoadClassPackage(_tpkPath);
-            am.LoadClassDatabaseFromPackage(_unityVersion);
+            am.LoadClassDatabaseFromPackage(_engineVersion);
         }
         if (_sharedMonoGen != null) am.MonoTempGenerator = _sharedMonoGen;
 
@@ -278,6 +278,8 @@ public class FontScanner
                 $"  [DIAG]   -> TMP confirmed, name={fontName}, schema={schema}, glyphs={schemaInfo.GlyphCount}, atlas={schemaInfo.AtlasFileId}:{schemaInfo.AtlasPathId}");
         }
 
+        var targetAsset = TmpFontHandler.ReadFromField(fullField);
+
         entries.Add(new FontEntry
         {
             File = displayName,
@@ -289,6 +291,7 @@ public class FontScanner
             GlyphCount = schemaInfo.GlyphCount,
             AtlasPadding = schemaInfo.AtlasPadding,
             AtlasPathId = schemaInfo.AtlasPathId,
+            PointSize = targetAsset.FaceInfo?.PointSize ?? 0,
         });
     }
 

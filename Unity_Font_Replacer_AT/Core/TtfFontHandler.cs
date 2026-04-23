@@ -6,7 +6,7 @@ namespace UnityFontReplacer.Core;
 public static class TtfFontHandler
 {
     /// <summary>
-    /// Unity Font 에셋에서 TTF 데이터를 읽는다.
+    /// Font 에셋에서 TTF 데이터를 읽는다.
     /// </summary>
     public static byte[]? ReadFontData(AssetTypeValueField baseField)
     {
@@ -46,7 +46,7 @@ public static class TtfFontHandler
     }
 
     /// <summary>
-    /// Unity Font 에셋의 이름을 읽는다.
+    /// Font 에셋의 이름을 읽는다.
     /// </summary>
     public static string ReadFontName(AssetTypeValueField baseField)
     {
@@ -54,7 +54,7 @@ public static class TtfFontHandler
     }
 
     /// <summary>
-    /// Unity Font 에셋에 새 TTF 데이터를 쓴다.
+    /// Font 에셋에 새 TTF 데이터를 쓴다.
     /// </summary>
     public static void ReplaceFontData(
         AssetsManager am,

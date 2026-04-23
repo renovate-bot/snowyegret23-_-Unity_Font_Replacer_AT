@@ -28,7 +28,7 @@ public static class ExportFontsCommand
 
         using var ctx = new AssetsContext(resolved.DataPath, resolved.ManagedPath);
 
-        var version = ctx.DetectUnityVersion();
+        var version = ctx.DetectEngineVersion();
         if (version != null)
         {
             ctx.LoadClassDatabase(version);

@@ -53,6 +53,10 @@ public class FontEntry
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public int AtlasPadding { get; set; }
 
+    [JsonPropertyName("point_size")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int PointSize { get; set; } = 0;
+
     [JsonPropertyName("force_raster")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public string? ForceRaster { get; set; }

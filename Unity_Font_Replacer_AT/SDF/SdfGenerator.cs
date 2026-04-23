@@ -11,7 +11,11 @@ namespace UnityFontReplacer.SDF;
 /// </summary>
 public static class SdfGenerator
 {
-    private const int SdffaaSupersample = 4;
+    private static readonly (int Width, int Height)[] ReplacementAtlasSizes =
+    [
+        (4096, 4096),
+        (8192, 8192),
+    ];
 
     public record SdfResult(
         TmpFontAsset FontAsset,
@@ -31,27 +35,20 @@ public static class SdfGenerator
         bool rasterMode = false,
         TextureFilterMode filterMode = TextureFilterMode.Bilinear)
     {
-        using var renderer = new GlyphRenderer(ttfData);
+        using var renderer = new GlyphRenderer(ttfData, rasterMode);
 
         // 1. 포인트 크기 결정
-        int resolvedSize = PointSizeSearch.Find(renderer, unicodes, atlasWidth, atlasHeight, padding, pointSize);
+        int requestedSize = PointSizeSearch.Find(renderer, unicodes, atlasWidth, atlasHeight, padding, pointSize);
 
         // 2. 글리프 메트릭 수집 + 패킹
-        var glyphMetrics = new List<(int unicode, GlyphMetrics metrics)>();
-        var packRects = new List<ShelfPacker.GlyphRect>();
-
-        foreach (var unicode in unicodes)
-        {
-            var m = renderer.MeasureGlyph(unicode, resolvedSize);
-            glyphMetrics.Add((unicode, m));
-            int w = Math.Max(1, m.Width) + padding * 2;
-            int h = Math.Max(1, m.Height) + padding * 2;
-            packRects.Add(new ShelfPacker.GlyphRect(unicode, w, h));
-        }
-
-        var placements = ShelfPacker.Pack(packRects, atlasWidth, atlasHeight);
-        if (placements == null)
-            throw new InvalidOperationException($"Failed to pack glyphs at point size {resolvedSize}");
+        var (resolvedSize, glyphMetrics, placements) = BuildExactLayout(
+            renderer,
+            unicodes,
+            requestedSize,
+            atlasWidth,
+            atlasHeight,
+            padding,
+            rasterMode);
 
         var placementMap = placements.ToDictionary(p => p.Id);
         var usedGlyphRects = placements
@@ -76,8 +73,6 @@ public static class SdfGenerator
             if (!placementMap.TryGetValue(unicode, out var placement))
                 continue;
 
-            renderer.GetGlyphBitmapBounds(unicode, resolvedSize, padding, out int bmpW, out int bmpH, out int offX, out int offY);
-
             // SDF 또는 래스터 변환
             byte[,] processed;
             if (rasterMode)
@@ -86,18 +81,21 @@ public static class SdfGenerator
             }
             else
             {
-                // Unity SDFAA 계열처럼 안티앨리어스 정보를 먼저 충분히 확보한 뒤
-                // 축소 샘플링해 가장자리 계단 현상을 줄인다.
-                var supersampledBitmap = renderer.RenderGlyphBitmapSupersampled(
-                    unicode,
-                    resolvedSize,
-                    padding,
-                    SdffaaSupersample);
-                var supersampledSdf = EdtCalculator.ComputeSdf(
-                    supersampledBitmap,
-                    Math.Max(1, padding * SdffaaSupersample));
-                processed = EdtCalculator.ResampleBilinear(supersampledSdf, bmpW, bmpH);
+                var sdfBitmap = renderer.RenderGlyphSdfBitmap(unicode, resolvedSize, padding, out _, out _);
+                if (sdfBitmap != null)
+                {
+                    processed = sdfBitmap;
+                }
+                else
+                {
+                    // FreeType SDF renderer를 사용할 수 없으면 기존 alpha-aware 경로로 fallback.
+                    var bitmap = renderer.RenderGlyphBitmap(unicode, resolvedSize, padding, out _, out _);
+                    processed = EdtCalculator.ComputeSdf(bitmap, padding);
+                }
             }
+
+            int bmpH = processed.GetLength(0);
+            int bmpW = processed.GetLength(1);
 
             // 아틀라스에 복사 (alpha 채널)
             int destW = Math.Min(bmpW, placement.Width);
@@ -119,17 +117,19 @@ public static class SdfGenerator
             // 글리프 메트릭(패딩 제외한 실제 글리프 영역)
             int glyphW = Math.Max(0, metrics.Width);
             int glyphH = Math.Max(0, metrics.Height);
-            int glyphX = placement.X + padding;
+            int glyphX = rasterMode ? placement.X + padding : placement.X;
             // TMP: bottom-origin Y
-            int glyphY = atlasHeight - (placement.Y + padding) - glyphH;
+            int glyphY = rasterMode
+                ? atlasHeight - (placement.Y + padding) - glyphH
+                : atlasHeight - placement.Y - glyphH;
 
             glyphTable.Add(new TmpGlyphNew
             {
                 Index = unicode,
                 MetricsWidth = glyphW,
                 MetricsHeight = glyphH,
-                HorizontalBearingX = offX,
-                HorizontalBearingY = globalMetrics.Ascender - offY,
+                HorizontalBearingX = metrics.HorizontalBearingX,
+                HorizontalBearingY = metrics.HorizontalBearingY,
                 HorizontalAdvance = metrics.HorizontalAdvance,
                 RectX = glyphX,
                 RectY = glyphY,
@@ -190,6 +190,107 @@ public static class SdfGenerator
         };
 
         return new SdfResult(fontAsset, atlas, materialProps, filterMode);
+    }
+
+    public static SdfResult GenerateForReplacement(
+        byte[] ttfData,
+        int[] unicodes,
+        int padding,
+        int pointSizeHint,
+        bool rasterMode,
+        TextureFilterMode filterMode)
+    {
+        var (atlasWidth, atlasHeight, requestedPointSize) = PlanReplacementGeneration(
+            ttfData,
+            unicodes,
+            padding,
+            pointSizeHint,
+            rasterMode);
+
+        return Generate(
+            ttfData,
+            unicodes,
+            atlasWidth,
+            atlasHeight,
+            padding,
+            requestedPointSize,
+            rasterMode,
+            filterMode);
+    }
+
+    private static (int AtlasWidth, int AtlasHeight, int RequestedPointSize) PlanReplacementGeneration(
+        byte[] ttfData,
+        int[] unicodes,
+        int padding,
+        int pointSizeHint,
+        bool rasterMode)
+    {
+        using var renderer = new GlyphRenderer(ttfData, rasterMode);
+
+        int requestedPointSize = NormalizePointSize(pointSizeHint);
+        if (requestedPointSize > 0)
+        {
+            foreach (var (width, height) in ReplacementAtlasSizes)
+            {
+                if (PointSizeSearch.CanPack(renderer, unicodes, requestedPointSize, width, height, padding))
+                    return (width, height, requestedPointSize);
+            }
+        }
+
+        foreach (var (width, height) in ReplacementAtlasSizes)
+        {
+            int autoPointSize = PointSizeSearch.Find(renderer, unicodes, width, height, padding, requestedSize: 0);
+            if (PointSizeSearch.CanPack(renderer, unicodes, autoPointSize, width, height, padding))
+                return (width, height, 0);
+        }
+
+        throw new InvalidOperationException("Failed to find a usable atlas/point-size combination");
+    }
+
+    private static int NormalizePointSize(int pointSizeHint)
+    {
+        if (pointSizeHint <= 0)
+            return 0;
+
+        return Math.Clamp(pointSizeHint, 8, 512);
+    }
+
+    private static (int ResolvedPointSize, List<(int unicode, GlyphMetrics metrics)> GlyphMetrics, List<ShelfPacker.Placement> Placements) BuildExactLayout(
+        GlyphRenderer renderer,
+        int[] unicodes,
+        int requestedPointSize,
+        int atlasWidth,
+        int atlasHeight,
+        int padding,
+        bool rasterMode)
+    {
+        for (int pointSize = requestedPointSize; pointSize >= 8; pointSize--)
+        {
+            var glyphMetrics = new List<(int unicode, GlyphMetrics metrics)>(unicodes.Length);
+            var packRects = new List<ShelfPacker.GlyphRect>(unicodes.Length);
+
+            foreach (var unicode in unicodes)
+            {
+                var metrics = renderer.MeasureGlyph(unicode, pointSize, padding);
+                glyphMetrics.Add((unicode, metrics));
+
+                int w = Math.Max(1, metrics.Width);
+                int h = Math.Max(1, metrics.Height);
+                if (rasterMode)
+                {
+                    w += padding * 2;
+                    h += padding * 2;
+                }
+
+                packRects.Add(new ShelfPacker.GlyphRect(unicode, w, h));
+            }
+
+            var placements = ShelfPacker.Pack(packRects, atlasWidth, atlasHeight);
+            if (placements != null)
+                return (pointSize, glyphMetrics, placements);
+        }
+
+        throw new InvalidOperationException($"Failed to pack glyphs at point size {requestedPointSize}");
     }
 
     /// <summary>

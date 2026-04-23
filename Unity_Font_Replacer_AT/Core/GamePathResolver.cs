@@ -10,7 +10,7 @@ public class ResolvedGamePath
 
 public static class GamePathResolver
 {
-    // Unity 에셋으로 알려진 확장자
+    // 에셋으로 알려진 확장자
     private static readonly HashSet<string> IncludeExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".assets", ".bundle", ".unity3d",
@@ -73,7 +73,7 @@ public static class GamePathResolver
             var ext = Path.GetExtension(file);
             var fileName = Path.GetFileName(file);
 
-            // 1. 알려진 Unity 확장자
+            // 1. 알려진 확장자
             if (IncludeExtensions.Contains(ext))
             {
                 files.Add(file);
@@ -87,14 +87,14 @@ public static class GamePathResolver
                 continue;
             }
 
-            // 3. 확장자 없는 파일 (Unity 번들일 수 있음)
+            // 3. 확장자 없는 파일 (번들일 수 있음)
             if (string.IsNullOrEmpty(ext))
             {
                 files.Add(file);
                 continue;
             }
 
-            // 4. 그 외: 시그니처로 Unity 에셋인지 확인 (번들 또는 직렬화 파일)
+            // 4. 그 외: 시그니처로 에셋인지 확인 (번들 또는 직렬화 파일)
             if (FontScanner.IsBundleFile(file) || IsSerializedAssetsFile(file))
             {
                 files.Add(file);
@@ -105,7 +105,7 @@ public static class GamePathResolver
     }
 
     /// <summary>
-    /// Unity 직렬화 에셋 파일 시그니처 확인.
+    /// 직렬화 에셋 파일 시그니처 확인.
     /// 헤더의 version 필드(오프셋 8, big-endian int32)가 유효 범위(6~100)인지 체크.
     /// </summary>
     private static bool IsSerializedAssetsFile(string filePath)

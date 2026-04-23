@@ -57,10 +57,10 @@ public static class ListCommand
 
         using var ctx = new AssetsContext(resolved.DataPath, resolved.ManagedPath);
 
-        // Unity 버전 로드
-        var version = !string.IsNullOrWhiteSpace(mapping.UnityVersion)
-            ? mapping.UnityVersion
-            : ctx.DetectUnityVersion();
+        // 버전 로드
+        var version = !string.IsNullOrWhiteSpace(mapping.EngineVersion)
+            ? mapping.EngineVersion
+            : ctx.DetectEngineVersion();
 
         if (version != null)
         {

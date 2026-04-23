@@ -1,304 +1,66 @@
 namespace UnityFontReplacer.SDF;
 
 /// <summary>
-/// Felzenszwalb/Huttenlocher O(n) 유클리드 거리 변환.
-/// scipy.ndimage.distance_transform_edt의 C# 구현.
+/// alpha-aware distance transform.
+/// 핵심 구조는 다음과 같다.
+/// - coverage alpha(0..1) 사용
+/// - partial alpha 픽셀에서 gradient 추정
+/// - edge distance correction 적용
+/// - inside/outside 2개 grid를 각각 전방/후방 sweep
+/// - 마지막에 signed distance로 재결합
 /// </summary>
 public static class EdtCalculator
 {
+    private const float Sqrt2 = 1.41421356237f;
+    private const float Half = 0.5f;
+    private const float One = 1.0f;
     private const float InfiniteDistance = 1_000_000f;
     private const float EdgeThreshold = 1f / 255f;
+    private const float RoundingBias = 0.5f;
+    private const float Midpoint = 127.5f;
+    private const float MinImprovement = 1e-6f;
 
-    /// <summary>
-    /// 2D 유클리드 거리 변환. 입력: binary mask (true=seed). 출력: 각 픽셀에서 가장 가까운 seed 픽셀까지의 거리.
-    /// </summary>
-    public static float[,] DistanceTransform(bool[,] mask)
+    public static byte[,] ComputeSdf(byte[,] alpha, int padding)
     {
-        int h = mask.GetLength(0);
-        int w = mask.GetLength(1);
-        var result = new float[h, w];
+        int height = alpha.GetLength(0);
+        int width = alpha.GetLength(1);
+        int count = width * height;
 
-        // 초기화: object=0, background=INF
-        float inf = (float)(w + h);
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-                result[y, x] = mask[y, x] ? 0f : inf * inf;
+        var coverage = new float[count];
+        bool hasPartialCoverage = false;
 
-        // 행 방향 1D 변환
-        var rowBuf = new float[Math.Max(w, h)];
-        for (int y = 0; y < h; y++)
+        for (int y = 0; y < height; y++)
         {
-            for (int x = 0; x < w; x++)
-                rowBuf[x] = result[y, x];
-
-            Edt1D(rowBuf, w);
-
-            for (int x = 0; x < w; x++)
-                result[y, x] = rowBuf[x];
-        }
-
-        // 열 방향 1D 변환
-        var colBuf = new float[h];
-        for (int x = 0; x < w; x++)
-        {
-            for (int y = 0; y < h; y++)
-                colBuf[y] = result[y, x];
-
-            Edt1D(colBuf, h);
-
-            for (int y = 0; y < h; y++)
-                result[y, x] = colBuf[y];
-        }
-
-        // 제곱근
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-                result[y, x] = MathF.Sqrt(result[y, x]);
-
-        return result;
-    }
-
-    /// <summary>
-    /// SDF를 계산한다. 입력: alpha 이미지(0-255). spread: SDF 확산 거리(보통 padding).
-    /// 출력: SDF 이미지(0-255). edge=128, inside>128, outside&lt;128.
-    /// 
-    /// 기존 threshold 기반 binary EDT 대신, anti-aliased alpha와 gradient를 함께 이용해
-    /// subpixel edge 위치를 추정하는 alpha-aware 거리장을 생성한다.
-    /// </summary>
-    public static byte[,] ComputeSdf(byte[,] alpha, int spread)
-    {
-        int h = alpha.GetLength(0);
-        int w = alpha.GetLength(1);
-
-        var coverage = new float[h, w];
-        bool hasEdgePixels = false;
-
-        for (int y = 0; y < h; y++)
-        {
-            for (int x = 0; x < w; x++)
+            for (int x = 0; x < width; x++)
             {
                 float value = alpha[y, x] / 255f;
-                coverage[y, x] = value;
-                if (value > EdgeThreshold && value < (1f - EdgeThreshold))
-                    hasEdgePixels = true;
+                coverage[(y * width) + x] = value;
+                if (value > EdgeThreshold && value < (One - EdgeThreshold))
+                    hasPartialCoverage = true;
             }
         }
 
-        if (!hasEdgePixels)
-            return ComputeBinarySdf(alpha, spread);
+        if (!hasPartialCoverage)
+            return ComputeBinarySdf(alpha, padding);
 
-        var gradientX = new float[h, w];
-        var gradientY = new float[h, w];
-        ComputeCoverageGradient(coverage, gradientX, gradientY);
+        var toFilled = BuildDistanceGrid(coverage, width, height, invert: false);
+        var toEmpty = BuildDistanceGrid(coverage, width, height, invert: true);
+        float scale = Midpoint / ((Math.Max(1, padding) * 2f) + 2f);
 
-        var edgeVectorX = new float[h, w];
-        var edgeVectorY = new float[h, w];
-        var distSq = new float[h, w];
-
-        bool seeded = InitializeEdgeSeeds(coverage, gradientX, gradientY, edgeVectorX, edgeVectorY, distSq);
-        if (!seeded)
-            return ComputeBinarySdf(alpha, spread);
-
-        PropagateDistanceField(edgeVectorX, edgeVectorY, distSq);
-
-        float spreadF = Math.Max(1f, spread);
-        var result = new byte[h, w];
-
-        for (int y = 0; y < h; y++)
+        var result = new byte[height, width];
+        for (int y = 0; y < height; y++)
         {
-            for (int x = 0; x < w; x++)
+            for (int x = 0; x < width; x++)
             {
-                float distance = MathF.Sqrt(distSq[y, x]);
-                float signedDistance = coverage[y, x] >= 0.5f ? distance : -distance;
-                float normalized = 0.5f + signedDistance / (2f * spreadF);
-                normalized = Math.Clamp(normalized, 0f, 1f);
-                result[y, x] = (byte)Math.Clamp(MathF.Round(normalized * 255f), 0f, 255f);
+                int index = (y * width) + x;
+                float signedDistance = toEmpty[index] - toFilled[index];
+                float encoded = Midpoint + (signedDistance * scale);
+                encoded = Math.Clamp(encoded, 0f, 255f);
+                result[y, x] = (byte)(encoded + RoundingBias);
             }
         }
 
         return result;
-    }
-
-    private static byte[,] ComputeBinarySdf(byte[,] alpha, int spread)
-    {
-        int h = alpha.GetLength(0);
-        int w = alpha.GetLength(1);
-
-        var inside = new bool[h, w];
-        var outside = new bool[h, w];
-        for (int y = 0; y < h; y++)
-        {
-            for (int x = 0; x < w; x++)
-            {
-                inside[y, x] = alpha[y, x] > 127;
-                outside[y, x] = !inside[y, x];
-            }
-        }
-
-        var distToOutside = DistanceTransform(outside);
-        var distToInside = DistanceTransform(inside);
-
-        float spreadF = Math.Max(1f, spread);
-        var result = new byte[h, w];
-
-        for (int y = 0; y < h; y++)
-        {
-            for (int x = 0; x < w; x++)
-            {
-                float signedDist = distToOutside[y, x] - distToInside[y, x];
-                float normalized = 0.5f + signedDist / (2f * spreadF);
-                normalized = Math.Clamp(normalized, 0f, 1f);
-                result[y, x] = (byte)Math.Clamp(MathF.Round(normalized * 255f), 0f, 255f);
-            }
-        }
-
-        return result;
-    }
-
-    private static void ComputeCoverageGradient(float[,] coverage, float[,] gradientX, float[,] gradientY)
-    {
-        int h = coverage.GetLength(0);
-        int w = coverage.GetLength(1);
-
-        for (int y = 0; y < h; y++)
-        {
-            int y0 = Math.Max(0, y - 1);
-            int y1 = Math.Min(h - 1, y + 1);
-
-            for (int x = 0; x < w; x++)
-            {
-                int x0 = Math.Max(0, x - 1);
-                int x1 = Math.Min(w - 1, x + 1);
-
-                float gx =
-                    (coverage[y0, x1] - coverage[y0, x0]) +
-                    2f * (coverage[y, x1] - coverage[y, x0]) +
-                    (coverage[y1, x1] - coverage[y1, x0]);
-
-                float gy =
-                    (coverage[y1, x0] - coverage[y0, x0]) +
-                    2f * (coverage[y1, x] - coverage[y0, x]) +
-                    (coverage[y1, x1] - coverage[y0, x1]);
-
-                gradientX[y, x] = gx;
-                gradientY[y, x] = gy;
-            }
-        }
-    }
-
-    private static bool InitializeEdgeSeeds(
-        float[,] coverage,
-        float[,] gradientX,
-        float[,] gradientY,
-        float[,] edgeVectorX,
-        float[,] edgeVectorY,
-        float[,] distSq)
-    {
-        int h = coverage.GetLength(0);
-        int w = coverage.GetLength(1);
-        bool seeded = false;
-
-        for (int y = 0; y < h; y++)
-        {
-            for (int x = 0; x < w; x++)
-            {
-                float cov = coverage[y, x];
-                edgeVectorX[y, x] = 0f;
-                edgeVectorY[y, x] = 0f;
-                distSq[y, x] = InfiniteDistance;
-
-                if (cov <= EdgeThreshold || cov >= (1f - EdgeThreshold))
-                    continue;
-
-                float gx = gradientX[y, x];
-                float gy = gradientY[y, x];
-                float gradientLength = MathF.Sqrt((gx * gx) + (gy * gy));
-
-                float offsetX = 0f;
-                float offsetY = 0f;
-
-                if (gradientLength > 1e-5f)
-                {
-                    float scale = Math.Clamp((0.5f - cov) / gradientLength, -1f, 1f);
-                    offsetX = gx * scale;
-                    offsetY = gy * scale;
-                }
-                else
-                {
-                    float fallback = Math.Clamp(0.5f - cov, -0.5f, 0.5f);
-                    offsetX = fallback;
-                }
-
-                edgeVectorX[y, x] = offsetX;
-                edgeVectorY[y, x] = offsetY;
-                distSq[y, x] = (offsetX * offsetX) + (offsetY * offsetY);
-                seeded = true;
-            }
-        }
-
-        return seeded;
-    }
-
-    private static void PropagateDistanceField(float[,] edgeVectorX, float[,] edgeVectorY, float[,] distSq)
-    {
-        int h = distSq.GetLength(0);
-        int w = distSq.GetLength(1);
-
-        for (int pass = 0; pass < 2; pass++)
-        {
-            for (int y = 0; y < h; y++)
-            {
-                for (int x = 0; x < w; x++)
-                {
-                    UpdateFromNeighbor(x, y, x - 1, y, edgeVectorX, edgeVectorY, distSq);
-                    UpdateFromNeighbor(x, y, x, y - 1, edgeVectorX, edgeVectorY, distSq);
-                    UpdateFromNeighbor(x, y, x - 1, y - 1, edgeVectorX, edgeVectorY, distSq);
-                    UpdateFromNeighbor(x, y, x + 1, y - 1, edgeVectorX, edgeVectorY, distSq);
-                }
-            }
-
-            for (int y = h - 1; y >= 0; y--)
-            {
-                for (int x = w - 1; x >= 0; x--)
-                {
-                    UpdateFromNeighbor(x, y, x + 1, y, edgeVectorX, edgeVectorY, distSq);
-                    UpdateFromNeighbor(x, y, x, y + 1, edgeVectorX, edgeVectorY, distSq);
-                    UpdateFromNeighbor(x, y, x + 1, y + 1, edgeVectorX, edgeVectorY, distSq);
-                    UpdateFromNeighbor(x, y, x - 1, y + 1, edgeVectorX, edgeVectorY, distSq);
-                }
-            }
-        }
-    }
-
-    private static void UpdateFromNeighbor(
-        int x,
-        int y,
-        int nx,
-        int ny,
-        float[,] edgeVectorX,
-        float[,] edgeVectorY,
-        float[,] distSq)
-    {
-        int h = distSq.GetLength(0);
-        int w = distSq.GetLength(1);
-
-        if ((uint)nx >= (uint)w || (uint)ny >= (uint)h)
-            return;
-
-        float neighborDistSq = distSq[ny, nx];
-        if (neighborDistSq >= InfiniteDistance)
-            return;
-
-        float candidateX = edgeVectorX[ny, nx] + (nx - x);
-        float candidateY = edgeVectorY[ny, nx] + (ny - y);
-        float candidateDistSq = (candidateX * candidateX) + (candidateY * candidateY);
-
-        if (candidateDistSq + 1e-6f >= distSq[y, x])
-            return;
-
-        edgeVectorX[y, x] = candidateX;
-        edgeVectorY[y, x] = candidateY;
-        distSq[y, x] = candidateDistSq;
     }
 
     public static byte[,] ResampleBilinear(byte[,] source, int targetWidth, int targetHeight)
@@ -329,62 +91,363 @@ public static class EdtCalculator
 
                 float top = Lerp(source[y0, x0], source[y0, x1], tx);
                 float bottom = Lerp(source[y1, x0], source[y1, x1], tx);
-                result[y, x] = (byte)Math.Clamp(MathF.Round(Lerp(top, bottom, ty)), 0, 255);
+                result[y, x] = (byte)Math.Clamp(MathF.Round(Lerp(top, bottom, ty)), 0f, 255f);
             }
         }
 
         return result;
     }
 
-    /// <summary>
-    /// 1D 제곱 유클리드 거리 변환 (Felzenszwalb/Huttenlocher).
-    /// f[i]를 in-place로 변환: f[q] = min_p (f[p] + (q-p)^2)
-    /// </summary>
-    private static void Edt1D(float[] f, int n)
+    private static float[] BuildDistanceGrid(float[] coverage, int width, int height, bool invert)
     {
-        if (n <= 0) return;
+        int count = width * height;
+        var image = new float[count];
+        var gradientX = new float[count];
+        var gradientY = new float[count];
+        var edgeDistance = new float[count];
+        var distance = new float[count];
+        var deltaX = new int[count];
+        var deltaY = new int[count];
 
-        var d = new float[n];    // 결과
-        var v = new int[n];      // 포물선 꼭짓점 인덱스
-        var z = new float[n + 1]; // 포물선 교차점
+        for (int i = 0; i < count; i++)
+            image[i] = invert ? One - coverage[i] : coverage[i];
+
+        ComputeGradients(image, width, height, gradientX, gradientY);
+
+        for (int i = 0; i < count; i++)
+        {
+            float a = image[i];
+            float edge = EdgeDistance(gradientX[i], gradientY[i], a);
+            edgeDistance[i] = edge;
+            deltaX[i] = 0;
+            deltaY[i] = 0;
+
+            if (a <= 0f)
+            {
+                distance[i] = InfiniteDistance;
+            }
+            else if (a < 1f)
+            {
+                distance[i] = edge;
+            }
+            else
+            {
+                distance[i] = 0f;
+            }
+        }
+
+        SweepForward(image, edgeDistance, distance, deltaX, deltaY, width, height);
+        SweepBackward(image, edgeDistance, distance, deltaX, deltaY, width, height);
+
+        for (int i = 0; i < count; i++)
+            distance[i] = Math.Max(0f, distance[i]);
+
+        return distance;
+    }
+
+    private static void SweepForward(
+        float[] image,
+        float[] edgeDistance,
+        float[] distance,
+        int[] deltaX,
+        int[] deltaY,
+        int width,
+        int height)
+    {
+        for (int y = 0; y < height; y++)
+        {
+            int rowOffset = y * width;
+            for (int x = 0; x < width; x++)
+            {
+                int index = rowOffset + x;
+                if (!CanPropagate(image[index], distance[index]))
+                    continue;
+
+                UpdateFromNeighbor(index, x, y, x - 1, y, edgeDistance, distance, deltaX, deltaY, width, height);
+                UpdateFromNeighbor(index, x, y, x, y - 1, edgeDistance, distance, deltaX, deltaY, width, height);
+                UpdateFromNeighbor(index, x, y, x - 1, y - 1, edgeDistance, distance, deltaX, deltaY, width, height);
+                UpdateFromNeighbor(index, x, y, x + 1, y - 1, edgeDistance, distance, deltaX, deltaY, width, height);
+            }
+        }
+    }
+
+    private static void SweepBackward(
+        float[] image,
+        float[] edgeDistance,
+        float[] distance,
+        int[] deltaX,
+        int[] deltaY,
+        int width,
+        int height)
+    {
+        for (int y = height - 1; y >= 0; y--)
+        {
+            int rowOffset = y * width;
+            for (int x = width - 1; x >= 0; x--)
+            {
+                int index = rowOffset + x;
+                if (!CanPropagate(image[index], distance[index]))
+                    continue;
+
+                UpdateFromNeighbor(index, x, y, x + 1, y, edgeDistance, distance, deltaX, deltaY, width, height);
+                UpdateFromNeighbor(index, x, y, x, y + 1, edgeDistance, distance, deltaX, deltaY, width, height);
+                UpdateFromNeighbor(index, x, y, x + 1, y + 1, edgeDistance, distance, deltaX, deltaY, width, height);
+                UpdateFromNeighbor(index, x, y, x - 1, y + 1, edgeDistance, distance, deltaX, deltaY, width, height);
+            }
+        }
+    }
+
+    private static bool CanPropagate(float alpha, float distance)
+    {
+        if (distance <= 0f || distance >= InfiniteDistance)
+            return false;
+
+        return alpha <= 0f || alpha >= 1f;
+    }
+
+    private static void UpdateFromNeighbor(
+        int currentIndex,
+        int x,
+        int y,
+        int nx,
+        int ny,
+        float[] edgeDistance,
+        float[] distance,
+        int[] deltaX,
+        int[] deltaY,
+        int width,
+        int height)
+    {
+        if ((uint)nx >= (uint)width || (uint)ny >= (uint)height)
+            return;
+
+        int neighborIndex = (ny * width) + nx;
+        if (distance[neighborIndex] >= InfiniteDistance)
+            return;
+
+        int candidateDx = deltaX[neighborIndex] + (x - nx);
+        int candidateDy = deltaY[neighborIndex] + (y - ny);
+        float candidateBase = MathF.Sqrt((candidateDx * candidateDx) + (candidateDy * candidateDy));
+        float candidateDistance = candidateBase + edgeDistance[currentIndex];
+
+        if (candidateDistance >= distance[currentIndex] - MinImprovement)
+            return;
+
+        distance[currentIndex] = candidateDistance;
+        deltaX[currentIndex] = candidateDx;
+        deltaY[currentIndex] = candidateDy;
+    }
+
+    private static void ComputeGradients(
+        float[] image,
+        int width,
+        int height,
+        float[] gradientX,
+        float[] gradientY)
+    {
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int index = (y * width) + x;
+                float a = image[index];
+
+                if (a <= EdgeThreshold || a >= (One - EdgeThreshold))
+                {
+                    gradientX[index] = 0f;
+                    gradientY[index] = 0f;
+                    continue;
+                }
+
+                float gx =
+                    -Sample(image, width, height, x - 1, y - 1) +
+                    Sample(image, width, height, x + 1, y - 1) -
+                    (Sqrt2 * Sample(image, width, height, x - 1, y)) +
+                    (Sqrt2 * Sample(image, width, height, x + 1, y)) -
+                    Sample(image, width, height, x - 1, y + 1) +
+                    Sample(image, width, height, x + 1, y + 1);
+
+                float gy =
+                    -Sample(image, width, height, x - 1, y - 1) -
+                    (Sqrt2 * Sample(image, width, height, x, y - 1)) -
+                    Sample(image, width, height, x + 1, y - 1) +
+                    Sample(image, width, height, x - 1, y + 1) +
+                    (Sqrt2 * Sample(image, width, height, x, y + 1)) +
+                    Sample(image, width, height, x + 1, y + 1);
+
+                float length = MathF.Sqrt((gx * gx) + (gy * gy));
+                if (length > MinImprovement)
+                {
+                    gradientX[index] = gx / length;
+                    gradientY[index] = gy / length;
+                }
+                else
+                {
+                    gradientX[index] = 0f;
+                    gradientY[index] = 0f;
+                }
+            }
+        }
+    }
+
+    private static float EdgeDistance(float gx, float gy, float alpha)
+    {
+        if (gx == 0f || gy == 0f)
+            return Half - alpha;
+
+        gx = MathF.Abs(gx);
+        gy = MathF.Abs(gy);
+
+        if (gx < gy)
+            (gx, gy) = (gy, gx);
+
+        float a1 = Half * gy / gx;
+        if (alpha < a1)
+        {
+            return Half * (gx + gy) - MathF.Sqrt(2f * gx * gy * alpha);
+        }
+
+        if (alpha < (One - a1))
+        {
+            return (Half - alpha) * gx;
+        }
+
+        return -Half * (gx + gy) + MathF.Sqrt(2f * gx * gy * (One - alpha));
+    }
+
+    private static byte[,] ComputeBinarySdf(byte[,] alpha, int padding)
+    {
+        int height = alpha.GetLength(0);
+        int width = alpha.GetLength(1);
+        var inside = new bool[height, width];
+        var outside = new bool[height, width];
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                inside[y, x] = alpha[y, x] > 127;
+                outside[y, x] = !inside[y, x];
+            }
+        }
+
+        var distToOutside = DistanceTransform(outside);
+        var distToInside = DistanceTransform(inside);
+        float scale = Midpoint / ((Math.Max(1, padding) * 2f) + 2f);
+        var result = new byte[height, width];
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                float signedDistance = distToOutside[y, x] - distToInside[y, x];
+                float encoded = Midpoint + (signedDistance * scale);
+                encoded = Math.Clamp(encoded, 0f, 255f);
+                result[y, x] = (byte)(encoded + RoundingBias);
+            }
+        }
+
+        return result;
+    }
+
+    private static float[,] DistanceTransform(bool[,] mask)
+    {
+        int height = mask.GetLength(0);
+        int width = mask.GetLength(1);
+        var result = new float[height, width];
+        float inf = (float)(width + height);
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+                result[y, x] = mask[y, x] ? 0f : inf * inf;
+        }
+
+        var rowBuffer = new float[Math.Max(width, height)];
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+                rowBuffer[x] = result[y, x];
+
+            Edt1D(rowBuffer, width);
+
+            for (int x = 0; x < width; x++)
+                result[y, x] = rowBuffer[x];
+        }
+
+        var colBuffer = new float[height];
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+                colBuffer[y] = result[y, x];
+
+            Edt1D(colBuffer, height);
+
+            for (int y = 0; y < height; y++)
+                result[y, x] = colBuffer[y];
+        }
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+                result[y, x] = MathF.Sqrt(result[y, x]);
+        }
+
+        return result;
+    }
+
+    private static void Edt1D(float[] values, int count)
+    {
+        if (count <= 0)
+            return;
+
+        var result = new float[count];
+        var vertices = new int[count];
+        var boundaries = new float[count + 1];
 
         int k = 0;
-        v[0] = 0;
-        z[0] = float.NegativeInfinity;
-        z[1] = float.PositiveInfinity;
+        vertices[0] = 0;
+        boundaries[0] = float.NegativeInfinity;
+        boundaries[1] = float.PositiveInfinity;
 
-        for (int q = 1; q < n; q++)
+        for (int q = 1; q < count; q++)
         {
-            // 새 포물선과 기존 포물선의 교차점 계산
-            float s;
+            float intersection;
             while (true)
             {
-                int vk = v[k];
-                s = ((f[q] + (float)q * q) - (f[vk] + (float)vk * vk)) / (2f * q - 2f * vk);
-
-                if (s > z[k])
+                int vk = vertices[k];
+                intersection = ((values[q] + (q * q)) - (values[vk] + (vk * vk))) / (2f * (q - vk));
+                if (intersection > boundaries[k])
                     break;
 
                 k--;
             }
 
             k++;
-            v[k] = q;
-            z[k] = s;
-            z[k + 1] = float.PositiveInfinity;
+            vertices[k] = q;
+            boundaries[k] = intersection;
+            boundaries[k + 1] = float.PositiveInfinity;
         }
 
         k = 0;
-        for (int q = 0; q < n; q++)
+        for (int q = 0; q < count; q++)
         {
-            while (z[k + 1] < q)
+            while (boundaries[k + 1] < q)
                 k++;
 
-            int vk = v[k];
-            d[q] = (float)(q - vk) * (q - vk) + f[vk];
+            int vk = vertices[k];
+            result[q] = ((q - vk) * (q - vk)) + values[vk];
         }
 
-        Array.Copy(d, f, n);
+        Array.Copy(result, values, count);
+    }
+
+    private static float Sample(float[] image, int width, int height, int x, int y)
+    {
+        if ((uint)x >= (uint)width || (uint)y >= (uint)height)
+            return 0f;
+
+        return image[(y * width) + x];
     }
 
     private static float Lerp(float a, float b, float t)

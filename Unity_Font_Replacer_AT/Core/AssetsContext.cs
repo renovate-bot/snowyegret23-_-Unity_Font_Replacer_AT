@@ -32,12 +32,12 @@ public class AssetsContext : IDisposable
         _classPackageLoaded = true;
     }
 
-    public void LoadClassDatabase(string unityVersion)
+    public void LoadClassDatabase(string engineVersion)
     {
         if (!_classPackageLoaded)
             LoadClassPackage();
 
-        Manager.LoadClassDatabaseFromPackage(unityVersion);
+        Manager.LoadClassDatabaseFromPackage(engineVersion);
     }
 
     private static string? FindClassPackage()
@@ -74,9 +74,9 @@ public class AssetsContext : IDisposable
         return Manager.LoadAssetsFileFromBundle(bundle, index);
     }
 
-    public string? DetectUnityVersion()
+    public string? DetectEngineVersion()
     {
-        // globalgamemanagers에서 Unity 버전 추출 시도
+        // globalgamemanagers에서 버전 추출 시도
         var ggmCandidates = new[]
         {
             Path.Combine(DataPath, "globalgamemanagers"),

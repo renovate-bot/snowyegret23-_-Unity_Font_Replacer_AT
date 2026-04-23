@@ -158,12 +158,13 @@ public static class OneShotCommand
         }
 
         var (atlasWidth, atlasHeight) = MakeSdfCommand.ParseAtlasSize(atlasSize);
+        bool useAutomaticReplacementStrategy = pointSize <= 0 && atlasWidth == 4096 && atlasHeight == 4096;
         bool rasterMode = forceRaster;
         var displayMode = rasterMode ? "Raster" : "SDF";
 
         using var ctx = new AssetsContext(resolved.DataPath, resolved.ManagedPath);
 
-        var version = ctx.DetectUnityVersion();
+        var version = ctx.DetectEngineVersion();
         if (version != null)
         {
             ctx.LoadClassDatabase(version);
@@ -174,7 +175,7 @@ public static class OneShotCommand
         var scanResult = scanner.ScanAll(resolved.AssetFiles, ps5Swizzle);
 
         var mapping = FontMapping.FromScanResult(scanResult, resolved.GamePath);
-        mapping.UnityVersion = version ?? "";
+        mapping.EngineVersion = version ?? "";
 
         string? tempRoot = null;
 
@@ -183,37 +184,48 @@ public static class OneShotCommand
             Dictionary<int, string> generatedSdfDirs = new();
             if (!ttfOnly)
             {
-                var paddings = mapping.Fonts.Values
+                var generationTargets = mapping.Fonts.Values
                     .Where(entry => entry.Type == FontType.SDF)
                     .Select(entry => NormalizePadding(entry.AtlasPadding))
                     .Distinct()
                     .OrderBy(value => value)
                     .ToList();
 
-                if (paddings.Count > 0)
+                if (generationTargets.Count > 0)
                 {
                     tempRoot = Path.Combine(
                         Path.GetTempPath(),
-                        "UnityFontReplacer_Oneshot",
+                        "FontReplacer_Oneshot",
                         Guid.NewGuid().ToString("N"));
                     Directory.CreateDirectory(tempRoot);
 
                     var fontBaseName = Path.GetFileNameWithoutExtension(ttfPath);
-                    foreach (var padding in paddings)
+                    foreach (var padding in generationTargets)
                     {
+                        var pointSizeLabel = pointSize > 0
+                            ? NormalizePointSize(pointSize).ToString()
+                            : "auto";
                         var paddingDir = Path.Combine(tempRoot, $"padding_{padding}");
                         Directory.CreateDirectory(paddingDir);
 
-                        AnsiConsole.MarkupLine($"[cyan]Generating {displayMode}: padding {padding}[/]");
-                        var result = SdfGenerator.Generate(
-                            ttfData,
-                            unicodes,
-                            atlasWidth: atlasWidth,
-                            atlasHeight: atlasHeight,
-                            padding: padding,
-                            pointSize: pointSize,
-                            rasterMode: rasterMode,
-                            filterMode: resolvedFilterMode);
+                        AnsiConsole.MarkupLine($"[cyan]Generating {displayMode}: padding {padding}, point size {pointSizeLabel}[/]");
+                        var result = useAutomaticReplacementStrategy
+                            ? SdfGenerator.GenerateForReplacement(
+                                ttfData,
+                                unicodes,
+                                padding: padding,
+                                pointSizeHint: 0,
+                                rasterMode: rasterMode,
+                                filterMode: resolvedFilterMode)
+                            : SdfGenerator.Generate(
+                                ttfData,
+                                unicodes,
+                                atlasWidth: atlasWidth,
+                                atlasHeight: atlasHeight,
+                                padding: padding,
+                                pointSize: pointSize,
+                                rasterMode: rasterMode,
+                                filterMode: resolvedFilterMode);
 
                         try
                         {
@@ -284,5 +296,13 @@ public static class OneShotCommand
     private static int NormalizePadding(int padding)
     {
         return padding > 0 ? padding : DefaultPadding;
+    }
+
+    private static int NormalizePointSize(int pointSize)
+    {
+        if (pointSize <= 0)
+            return 0;
+
+        return Math.Clamp(pointSize, 8, 512);
     }
 }

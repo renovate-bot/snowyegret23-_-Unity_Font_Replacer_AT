@@ -13,13 +13,13 @@ public static class Strings
     {
         ["app_description"] = new()
         {
-            ["ko"] = "Unity 폰트 교체 도구 (AssetsTools.NET)",
-            ["en"] = "Unity Font Replacer (AssetsTools.NET)",
+            ["ko"] = "폰트 교체 도구 (AssetsTools.NET)",
+            ["en"] = "Font replacer (AssetsTools.NET)",
         },
         ["opt_gamepath"] = new()
         {
-            ["ko"] = "Unity 게임 경로",
-            ["en"] = "Unity game path",
+            ["ko"] = "게임 경로",
+            ["en"] = "Game path",
         },
         ["cmd_parse"] = new()
         {

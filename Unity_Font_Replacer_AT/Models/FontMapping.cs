@@ -8,7 +8,7 @@ public class FontMapping
     public string GamePath { get; set; } = "";
 
     [JsonPropertyName("unity_version")]
-    public string UnityVersion { get; set; } = "";
+    public string EngineVersion { get; set; } = "";
 
     [JsonPropertyName("fonts")]
     public Dictionary<string, FontEntry> Fonts { get; set; } = new();
@@ -18,7 +18,7 @@ public class FontMapping
         var mapping = new FontMapping
         {
             GamePath = gamePath,
-            UnityVersion = result.UnityVersion ?? "",
+            EngineVersion = result.EngineVersion ?? "",
         };
 
         foreach (var entry in result.Entries)

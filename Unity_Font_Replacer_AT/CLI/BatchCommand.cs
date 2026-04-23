@@ -90,7 +90,7 @@ public static class BatchCommand
 
         using var ctx = new AssetsContext(resolved.DataPath, resolved.ManagedPath);
 
-        var version = ctx.DetectUnityVersion();
+        var version = ctx.DetectEngineVersion();
         if (version != null)
         {
             ctx.LoadClassDatabase(version);
@@ -103,7 +103,7 @@ public static class BatchCommand
 
         // 2. 매핑 생성 - 모든 폰트를 해당 폰트로 교체
         var mapping = FontMapping.FromScanResult(scanResult, resolved.GamePath);
-        mapping.UnityVersion = version ?? "";
+        mapping.EngineVersion = version ?? "";
 
         int assignCount = 0;
         foreach (var entry in mapping.Fonts.Values)

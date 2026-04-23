@@ -72,7 +72,7 @@ public static class TextureHandler
         int h = image.Height;
 
         // 알파 채널 추출 → Alpha8 raw bytes
-        // Unity 텍스처는 bottom-origin, PNG는 top-origin → 상하 반전
+        // 텍스처는 bottom-origin, PNG는 top-origin → 상하 반전
         var alpha8 = new byte[w * h];
         image.ProcessPixelRows(accessor =>
         {

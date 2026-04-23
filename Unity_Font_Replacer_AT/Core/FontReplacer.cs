@@ -328,19 +328,19 @@ public class FontReplacer
         if (resolved == null)
             return;
 
-        var dataUnityPath = FindAssetFile(resolved.AssetFiles, "data.unity3d");
-        if (dataUnityPath == null)
+        var dataBundlePath = FindAssetFile(resolved.AssetFiles, "data.unity3d");
+        if (dataBundlePath == null)
             return;
 
         var patches = BuildStandaloneSdfMirrorPatches(mapping);
         if (patches.Count == 0)
             return;
 
-        int count = FontScanner.IsBundleFile(dataUnityPath)
-            ? ReplaceStandaloneSdfMirrorsInBundle(dataUnityPath, patches, resolved.DataPath, outputDir)
-            : ReplaceStandaloneSdfMirrorsInAssetsFile(dataUnityPath, patches, resolved.DataPath, outputDir);
+        int count = FontScanner.IsBundleFile(dataBundlePath)
+            ? ReplaceStandaloneSdfMirrorsInBundle(dataBundlePath, patches, resolved.DataPath, outputDir)
+            : ReplaceStandaloneSdfMirrorsInAssetsFile(dataBundlePath, patches, resolved.DataPath, outputDir);
         if (count > 0)
-            AnsiConsole.MarkupLine($"[green]Standalone SDF mirrors saved: {Path.GetFileName(dataUnityPath)}[/]");
+            AnsiConsole.MarkupLine($"[green]Standalone SDF mirrors saved: {Path.GetFileName(dataBundlePath)}[/]");
     }
 
     private List<StandaloneSdfMirrorPatch> BuildStandaloneSdfMirrorPatches(FontMapping mapping)
@@ -828,9 +828,6 @@ public class FontReplacer
         var generatedRoot = EnsureGeneratedSdfRoot();
         var fontBaseName = Path.GetFileNameWithoutExtension(ttfPath);
         var modeSuffix = preferRaster ? "raster" : "sdf";
-        var outputDir = Path.Combine(generatedRoot, $"{SanitizePathSegment(fontBaseName)}_{modeSuffix}_padding_{padding}");
-        Directory.CreateDirectory(outputDir);
-
         byte[] ttfData;
         try
         {
@@ -844,16 +841,19 @@ public class FontReplacer
 
         var displayMode = preferRaster ? "Raster" : "SDF";
         var filterMode = preferRaster ? TextureFilterMode.Point : TextureFilterMode.Bilinear;
-        AnsiConsole.MarkupLine($"[cyan]Generating {displayMode} from TTF: {Markup.Escape(Path.GetFileName(ttfPath))} (padding {padding})[/]");
-        var result = SdfGenerator.Generate(
+        AnsiConsole.MarkupLine($"[cyan]Generating {displayMode} from TTF: {Markup.Escape(Path.GetFileName(ttfPath))} (padding {padding}, point size auto)[/]");
+        var result = SdfGenerator.GenerateForReplacement(
             ttfData,
             unicodes,
-            atlasWidth: 4096,
-            atlasHeight: 4096,
             padding: padding,
-            pointSize: 0,
+            pointSizeHint: 0,
             rasterMode: preferRaster,
             filterMode: filterMode);
+
+        var outputDir = Path.Combine(
+            generatedRoot,
+            $"{SanitizePathSegment(fontBaseName)}_{modeSuffix}_padding_{padding}_atlas_{result.FontAsset.AtlasWidth}x{result.FontAsset.AtlasHeight}_ps_{result.FontAsset.FaceInfo.PointSize}");
+        Directory.CreateDirectory(outputDir);
 
         try
         {
@@ -1074,7 +1074,7 @@ public class FontReplacer
     {
         _generatedSdfRoot ??= Path.Combine(
             Path.GetTempPath(),
-            "UnityFontReplacer_ListSdf",
+            "FontReplacer_ListSdf",
             Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_generatedSdfRoot);
         return _generatedSdfRoot;
