@@ -9,32 +9,59 @@ namespace UnityFontReplacer.CLI;
 public static class OneShotCommand
 {
     private const int DefaultPadding = 7;
+    private const string DefaultAtlasSize = "4096,4096";
+    private const string DefaultFilterMode = "bilinear";
 
-    public static Command Build(Option<string> gamePathOption)
+    public static Command Build()
     {
         var oneShotCommand = new Command("oneshot", Strings.Get("cmd_oneshot"));
+        var gamePathOption = CommandLineOptions.CreateGamePathOption();
 
-        var fontOption = new Option<string>(
-            aliases: ["--font", "-f"],
-            description: "TTF/OTF file path or resolvable font name")
-        { IsRequired = true };
+        var fontOption = CommandLineOptions.RequiredOption<string>(
+            "--font",
+            "TTF/OTF file path or resolvable font name",
+            "-f");
 
-        var ps5Option = new Option<bool>("--ps5-swizzle", "Handle PS5 texture swizzle");
-        var outputOption = new Option<string?>("--output-only", "Write modified files to this directory instead of in-place");
-        var sdfOnlyOption = new Option<bool>("--sdfonly", "Replace SDF fonts only");
-        var ttfOnlyOption = new Option<bool>("--ttfonly", "Replace TTF fonts only");
+        var ps5Option = CommandLineOptions.OptionalOption<bool>("--ps5-swizzle", "Handle PS5 texture swizzle");
+        var outputOption = CommandLineOptions.OptionalOption<string?>("--output-only", "Write modified files to this directory instead of in-place");
+        var sdfOnlyOption = CommandLineOptions.OptionalOption<bool>("--sdfonly", "Replace SDF fonts only");
+        var ttfOnlyOption = CommandLineOptions.OptionalOption<bool>("--ttfonly", "Replace TTF fonts only");
+        var rasterOption = CommandLineOptions.OptionalOption<bool>("--raster", "Generate raster atlases for SDF replacements");
+        var sdfOption = CommandLineOptions.OptionalOption<bool>("--sdf", "Generate SDF atlases for SDF replacements");
+        var atlasSizeOption = CommandLineOptions.OptionalOption("--atlas-size", DefaultAtlasSize, "Atlas size (W,H)");
+        var pointSizeOption = CommandLineOptions.OptionalOption("--point-size", 0, "Point size (0=auto)");
+        var charsetOption = CommandLineOptions.OptionalOption("--charset", MakeSdfCommand.DefaultCharsetArgument, "Charset file or literal");
+        var filterModeOption = CommandLineOptions.OptionalOption("--filter-mode", DefaultFilterMode, "point / bilinear / trilinear");
 
-        oneShotCommand.AddOption(gamePathOption);
-        oneShotCommand.AddOption(fontOption);
-        oneShotCommand.AddOption(ps5Option);
-        oneShotCommand.AddOption(outputOption);
-        oneShotCommand.AddOption(sdfOnlyOption);
-        oneShotCommand.AddOption(ttfOnlyOption);
+        oneShotCommand.Add(gamePathOption);
+        oneShotCommand.Add(fontOption);
+        oneShotCommand.Add(ps5Option);
+        oneShotCommand.Add(outputOption);
+        oneShotCommand.Add(sdfOnlyOption);
+        oneShotCommand.Add(ttfOnlyOption);
+        oneShotCommand.Add(rasterOption);
+        oneShotCommand.Add(sdfOption);
+        oneShotCommand.Add(atlasSizeOption);
+        oneShotCommand.Add(pointSizeOption);
+        oneShotCommand.Add(charsetOption);
+        oneShotCommand.Add(filterModeOption);
 
-        oneShotCommand.SetHandler(async (gamePath, font, ps5, output, sdfOnly, ttfOnly) =>
+        oneShotCommand.SetAction(async parseResult =>
         {
-            await ExecuteAsync(gamePath, font, ps5, output, sdfOnly, ttfOnly);
-        }, gamePathOption, fontOption, ps5Option, outputOption, sdfOnlyOption, ttfOnlyOption);
+            await ExecuteAsync(
+                parseResult.GetRequiredValue(gamePathOption),
+                parseResult.GetRequiredValue(fontOption),
+                parseResult.GetValue(ps5Option),
+                parseResult.GetValue(outputOption),
+                parseResult.GetValue(sdfOnlyOption),
+                parseResult.GetValue(ttfOnlyOption),
+                parseResult.GetValue(rasterOption),
+                parseResult.GetValue(sdfOption),
+                parseResult.GetValue(atlasSizeOption) ?? DefaultAtlasSize,
+                parseResult.GetValue(pointSizeOption),
+                parseResult.GetValue(charsetOption) ?? MakeSdfCommand.DefaultCharsetArgument,
+                parseResult.GetValue(filterModeOption) ?? DefaultFilterMode);
+        });
 
         return oneShotCommand;
     }
@@ -45,9 +72,21 @@ public static class OneShotCommand
         bool ps5Swizzle,
         string? outputDir,
         bool sdfOnly,
-        bool ttfOnly)
+        bool ttfOnly,
+        bool raster,
+        bool sdf,
+        string atlasSize,
+        int pointSize,
+        string charset,
+        string filterMode)
     {
         await Task.CompletedTask;
+
+        if (raster && sdf)
+        {
+            AnsiConsole.MarkupLine("[red]--raster and --sdf cannot be used together.[/]");
+            return;
+        }
 
         var resolved = GamePathResolver.Resolve(gamePath);
         if (resolved == null)
@@ -84,6 +123,36 @@ public static class OneShotCommand
             return;
         }
 
+        int[] unicodes = [];
+        if (!ttfOnly)
+        {
+            try
+            {
+                unicodes = MakeSdfCommand.LoadCharset(charset);
+            }
+            catch (FileNotFoundException ex)
+            {
+                AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
+                return;
+            }
+
+            if (unicodes.Length == 0)
+            {
+                AnsiConsole.MarkupLine("[red]Charset is empty.[/]");
+                return;
+            }
+        }
+
+        if (!TextureFilterModeParser.TryParse(filterMode, out var resolvedFilterMode))
+        {
+            AnsiConsole.MarkupLine($"[red]Invalid filter mode: {Markup.Escape(filterMode)} (point / bilinear / trilinear)[/]");
+            return;
+        }
+
+        var (atlasWidth, atlasHeight) = MakeSdfCommand.ParseAtlasSize(atlasSize);
+        bool rasterMode = raster;
+        var displayMode = rasterMode ? "Raster" : "SDF";
+
         using var ctx = new AssetsContext(resolved.DataPath, resolved.ManagedPath);
 
         var version = ctx.DetectUnityVersion();
@@ -115,23 +184,6 @@ public static class OneShotCommand
 
                 if (paddings.Count > 0)
                 {
-                    int[] unicodes;
-                    try
-                    {
-                        unicodes = MakeSdfCommand.LoadCharset(MakeSdfCommand.DefaultCharsetArgument);
-                    }
-                    catch (FileNotFoundException ex)
-                    {
-                        AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
-                        return;
-                    }
-
-                    if (unicodes.Length == 0)
-                    {
-                        AnsiConsole.MarkupLine("[red]Default charset is empty.[/]");
-                        return;
-                    }
-
                     tempRoot = Path.Combine(
                         Path.GetTempPath(),
                         "UnityFontReplacer_Oneshot",
@@ -144,16 +196,16 @@ public static class OneShotCommand
                         var paddingDir = Path.Combine(tempRoot, $"padding_{padding}");
                         Directory.CreateDirectory(paddingDir);
 
-                        AnsiConsole.MarkupLine($"[cyan]Generating SDF: padding {padding}[/]");
+                        AnsiConsole.MarkupLine($"[cyan]Generating {displayMode}: padding {padding}[/]");
                         var result = SdfGenerator.Generate(
                             ttfData,
                             unicodes,
-                            atlasWidth: 4096,
-                            atlasHeight: 4096,
+                            atlasWidth: atlasWidth,
+                            atlasHeight: atlasHeight,
                             padding: padding,
-                            pointSize: 0,
-                            rasterMode: false,
-                            filterMode: TextureFilterMode.Bilinear);
+                            pointSize: pointSize,
+                            rasterMode: rasterMode,
+                            filterMode: resolvedFilterMode);
 
                         try
                         {

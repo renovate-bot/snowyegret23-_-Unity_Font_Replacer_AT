@@ -71,7 +71,7 @@ public static class MakeSdfCommand
         {
             var result = SdfGenerator.Generate(ttfData, unicodes, aw, ah, padding, pointSize, rasterMode, resolvedFilterMode);
 
-            var outputDir = Path.Combine(Directory.GetCurrentDirectory(), "KR_ASSETS");
+            var outputDir = Path.Combine(Directory.GetCurrentDirectory(), "ASSETS");
             Directory.CreateDirectory(outputDir);
             SdfGenerator.SaveToFiles(result, outputDir, fontName);
 
@@ -101,7 +101,7 @@ public static class MakeSdfCommand
         return null;
     }
 
-    private static (int width, int height) ParseAtlasSize(string s)
+    public static (int width, int height) ParseAtlasSize(string s)
     {
         var parts = s.Split(',');
         if (parts.Length == 2 &&

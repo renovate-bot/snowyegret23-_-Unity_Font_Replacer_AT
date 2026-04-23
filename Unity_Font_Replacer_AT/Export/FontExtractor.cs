@@ -48,7 +48,7 @@ public class FontExtractor
             }
         }
 
-        AnsiConsole.MarkupLine($"Discovered [green]{discovered.Count}[/] TMP font(s)");
+        AnsiConsole.MarkupLine($"Discovered [green]{discovered.Count}[/] SDF font(s)");
 
         // Pass 2: 추출
         foreach (var font in discovered)

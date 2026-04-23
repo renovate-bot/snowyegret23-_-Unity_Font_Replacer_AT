@@ -622,7 +622,7 @@ public class FontReplacer
 
                 if (string.IsNullOrWhiteSpace(sourceData.AtlasPngPath) || targetAsset.AtlasTexturePathId == 0)
                 {
-                    AnsiConsole.MarkupLine($"[yellow]TMP skipped (atlas missing): {Markup.Escape(entry.Name)}[/]");
+                    AnsiConsole.MarkupLine($"[yellow]SDF skipped (atlas missing): {Markup.Escape(entry.Name)}[/]");
                     continue;
                 }
 
@@ -638,7 +638,7 @@ public class FontReplacer
                     : ResolveExternalCabPath(inst, targetAsset.AtlasTextureFileId);
                 if (textureLocalInfo == null && string.IsNullOrWhiteSpace(deferredTextureTarget))
                 {
-                    AnsiConsole.MarkupLine($"[yellow]TMP skipped (atlas not resolvable): {Markup.Escape(entry.Name)}[/]");
+                    AnsiConsole.MarkupLine($"[yellow]SDF skipped (atlas not resolvable): {Markup.Escape(entry.Name)}[/]");
                     continue;
                 }
 
@@ -698,17 +698,17 @@ public class FontReplacer
 
                 if (!atlasReplaced)
                 {
-                    AnsiConsole.MarkupLine($"[yellow]TMP skipped (atlas not resolvable): {Markup.Escape(entry.Name)}[/]");
+                    AnsiConsole.MarkupLine($"[yellow]SDF skipped (atlas not resolvable): {Markup.Escape(entry.Name)}[/]");
                     continue;
                 }
 
                 count++;
                 var detail = exactMaterialPatched ? "+atlas+material" : "+atlas";
-                AnsiConsole.MarkupLine($"[green]TMP replaced ({detail}): {Markup.Escape(entry.Name)}[/]");
+                AnsiConsole.MarkupLine($"[green]SDF replaced ({detail}): {Markup.Escape(entry.Name)}[/]");
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine($"[red]TMP replace failed ({Markup.Escape(entry.Name)}): {Markup.Escape(ex.Message)}[/]");
+                AnsiConsole.MarkupLine($"[red]SDF replace failed ({Markup.Escape(entry.Name)}): {Markup.Escape(ex.Message)}[/]");
             }
         }
 
@@ -1018,8 +1018,8 @@ public class FontReplacer
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var baseRoot in new[]
                  {
-                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KR_ASSETS"),
-                     Path.Combine(Directory.GetCurrentDirectory(), "KR_ASSETS"),
+                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ASSETS"),
+                     Path.Combine(Directory.GetCurrentDirectory(), "ASSETS"),
                  })
         {
             if (!Directory.Exists(baseRoot))

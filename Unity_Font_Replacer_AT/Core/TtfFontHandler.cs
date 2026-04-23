@@ -87,7 +87,7 @@ public static class TtfFontHandler
 
     /// <summary>
     /// TTF/OTF 입력값을 실제 파일 경로로 해석한다.
-    /// 직접 경로 -> 상대 경로(CWD/EXE) -> KR_ASSETS 하위 순으로 탐색한다.
+    /// 직접 경로 -> 상대 경로(CWD/EXE) -> ASSETS 하위 순으로 탐색한다.
     /// </summary>
     public static string? ResolveTtfPath(string source)
     {
@@ -210,8 +210,8 @@ public static class TtfFontHandler
                  {
                      Directory.GetCurrentDirectory(),
                      AppDomain.CurrentDomain.BaseDirectory,
-                     Path.Combine(Directory.GetCurrentDirectory(), "KR_ASSETS"),
-                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KR_ASSETS"),
+                     Path.Combine(Directory.GetCurrentDirectory(), "ASSETS"),
+                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ASSETS"),
                  })
         {
             if (Directory.Exists(root) && seen.Add(root))

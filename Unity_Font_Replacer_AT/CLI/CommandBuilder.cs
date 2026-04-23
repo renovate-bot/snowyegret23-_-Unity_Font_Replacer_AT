@@ -6,84 +6,98 @@ public static class CommandBuilder
 {
     public static RootCommand Build()
     {
-        var gamePathOption = new Option<string>(
-            aliases: ["--gamepath", "-g"],
-            description: "Unity game path")
-        { IsRequired = true };
-
         // parse subcommand
         var parseCommand = new Command("parse", Strings.Get("cmd_parse"));
-        parseCommand.AddOption(gamePathOption);
-        var parsePs5Option = new Option<bool>("--ps5-swizzle", "Detect PS5 swizzle state");
-        var parseMaxWorkersOption = new Option<int>("--max-workers", () => 1, "Max parallel scan workers");
-        parseCommand.AddOption(parsePs5Option);
-        parseCommand.AddOption(parseMaxWorkersOption);
-        parseCommand.SetHandler(async (gamePath, ps5, maxWorkers) =>
+        var parseGamePathOption = CommandLineOptions.CreateGamePathOption();
+        var parsePs5Option = CommandLineOptions.OptionalOption<bool>("--ps5-swizzle", "Detect PS5 swizzle state");
+        var parseMaxWorkersOption = CommandLineOptions.OptionalOption("--max-workers", 1, "Max parallel scan workers");
+        parseCommand.Add(parseGamePathOption);
+        parseCommand.Add(parsePs5Option);
+        parseCommand.Add(parseMaxWorkersOption);
+        parseCommand.SetAction(async parseResult =>
         {
-            await ParseCommand.ExecuteAsync(gamePath, ps5, maxWorkers);
-        }, gamePathOption, parsePs5Option, parseMaxWorkersOption);
+            await ParseCommand.ExecuteAsync(
+                parseResult.GetRequiredValue(parseGamePathOption),
+                parseResult.GetValue(parsePs5Option),
+                parseResult.GetValue(parseMaxWorkersOption));
+        });
 
         // list subcommand
         var listCommand = new Command("list", Strings.Get("cmd_list"));
-        var listFileOption = new Option<string>("--file", "Font mapping JSON file") { IsRequired = true };
-        listCommand.AddOption(gamePathOption);
-        listCommand.AddOption(listFileOption);
-        listCommand.SetHandler(async (gamePath, file) =>
+        var listGamePathOption = CommandLineOptions.CreateGamePathOption();
+        var listFileOption = CommandLineOptions.RequiredOption<string>("--file", "Font mapping JSON file");
+        listCommand.Add(listGamePathOption);
+        listCommand.Add(listFileOption);
+        listCommand.SetAction(async parseResult =>
         {
-            await ListCommand.ExecuteAsync(gamePath, file);
-        }, gamePathOption, listFileOption);
+            await ListCommand.ExecuteAsync(
+                parseResult.GetRequiredValue(listGamePathOption),
+                parseResult.GetRequiredValue(listFileOption));
+        });
 
         // export subcommand
         var exportCommand = new Command("export", Strings.Get("cmd_export"));
-        exportCommand.AddOption(gamePathOption);
-        exportCommand.SetHandler(async (gamePath) =>
+        var exportGamePathOption = CommandLineOptions.CreateGamePathOption();
+        exportCommand.Add(exportGamePathOption);
+        exportCommand.SetAction(async parseResult =>
         {
-            await ExportFontsCommand.ExecuteAsync(gamePath);
-        }, gamePathOption);
+            await ExportFontsCommand.ExecuteAsync(parseResult.GetRequiredValue(exportGamePathOption));
+        });
 
         // makesdf subcommand
         var makeSdfCommand = new Command("makesdf", Strings.Get("cmd_makesdf"));
-        var ttfOption = new Option<string>("--ttf", "TTF file path") { IsRequired = true };
-        var atlasSizeOption = new Option<string>("--atlas-size", () => "4096,4096", "Atlas size (W,H)");
-        var pointSizeOption = new Option<int>("--point-size", () => 0, "Point size (0=auto)");
-        var paddingOption = new Option<int>("--padding", () => 7, "Atlas padding");
-        var charsetOption = new Option<string>("--charset", () => MakeSdfCommand.DefaultCharsetArgument, "Charset file or literal");
-        var renderModeOption = new Option<string>("--rendermode", () => "sdf", "sdf / raster");
-        var filterModeOption = new Option<string>("--filter-mode", () => "bilinear", "point / bilinear / trilinear");
-        makeSdfCommand.AddOption(ttfOption);
-        makeSdfCommand.AddOption(atlasSizeOption);
-        makeSdfCommand.AddOption(pointSizeOption);
-        makeSdfCommand.AddOption(paddingOption);
-        makeSdfCommand.AddOption(charsetOption);
-        makeSdfCommand.AddOption(renderModeOption);
-        makeSdfCommand.AddOption(filterModeOption);
-        makeSdfCommand.SetHandler(async (ttf, atlasSize, pointSize, padding, charset, renderMode, filterMode) =>
+        var ttfOption = CommandLineOptions.RequiredOption<string>("--ttf", "TTF file path");
+        var atlasSizeOption = CommandLineOptions.OptionalOption("--atlas-size", "4096,4096", "Atlas size (W,H)");
+        var pointSizeOption = CommandLineOptions.OptionalOption("--point-size", 0, "Point size (0=auto)");
+        var paddingOption = CommandLineOptions.OptionalOption("--padding", 7, "Atlas padding");
+        var charsetOption = CommandLineOptions.OptionalOption("--charset", MakeSdfCommand.DefaultCharsetArgument, "Charset file or literal");
+        var renderModeOption = CommandLineOptions.OptionalOption("--rendermode", "sdf", "sdf / raster");
+        var filterModeOption = CommandLineOptions.OptionalOption("--filter-mode", "bilinear", "point / bilinear / trilinear");
+        makeSdfCommand.Add(ttfOption);
+        makeSdfCommand.Add(atlasSizeOption);
+        makeSdfCommand.Add(pointSizeOption);
+        makeSdfCommand.Add(paddingOption);
+        makeSdfCommand.Add(charsetOption);
+        makeSdfCommand.Add(renderModeOption);
+        makeSdfCommand.Add(filterModeOption);
+        makeSdfCommand.SetAction(async parseResult =>
         {
-            await MakeSdfCommand.ExecuteAsync(ttf, atlasSize, pointSize, padding, charset, renderMode, filterMode);
-        }, ttfOption, atlasSizeOption, pointSizeOption, paddingOption, charsetOption, renderModeOption, filterModeOption);
+            var atlasSize = parseResult.GetValue(atlasSizeOption) ?? "4096,4096";
+            var charset = parseResult.GetValue(charsetOption) ?? MakeSdfCommand.DefaultCharsetArgument;
+            var renderMode = parseResult.GetValue(renderModeOption) ?? "sdf";
+            var filterMode = parseResult.GetValue(filterModeOption) ?? "bilinear";
+
+            await MakeSdfCommand.ExecuteAsync(
+                parseResult.GetRequiredValue(ttfOption),
+                atlasSize,
+                parseResult.GetValue(pointSizeOption),
+                parseResult.GetValue(paddingOption),
+                charset,
+                renderMode,
+                filterMode);
+        });
 
         // batch subcommand
-        var batchCommand = BatchCommand.Build(gamePathOption);
+        var batchCommand = BatchCommand.Build();
 
         // diag subcommand (번들 내부 에셋 타입 진단)
         var diagCommand = new Command("diag", "Diagnose bundle contents");
-        var diagFileOption = new Option<string>("--file", "Bundle file path") { IsRequired = true };
-        diagCommand.AddOption(diagFileOption);
-        diagCommand.SetHandler(async (file) =>
+        var diagFileOption = CommandLineOptions.RequiredOption<string>("--file", "Bundle file path");
+        diagCommand.Add(diagFileOption);
+        diagCommand.SetAction(parseResult =>
         {
-            await Task.CompletedTask;
-            DiagBundle(file);
-        }, diagFileOption);
+            DiagBundle(parseResult.GetRequiredValue(diagFileOption));
+        });
 
         // root
         var rootCommand = new RootCommand(Strings.Get("app_description"));
-        rootCommand.AddCommand(parseCommand);
-        rootCommand.AddCommand(listCommand);
-        rootCommand.AddCommand(batchCommand);
-        rootCommand.AddCommand(OneShotCommand.Build(gamePathOption));
-        rootCommand.AddCommand(exportCommand);
-        rootCommand.AddCommand(makeSdfCommand);
-        rootCommand.AddCommand(diagCommand);
+        rootCommand.Add(parseCommand);
+        rootCommand.Add(listCommand);
+        rootCommand.Add(batchCommand);
+        rootCommand.Add(OneShotCommand.Build());
+        rootCommand.Add(exportCommand);
+        rootCommand.Add(makeSdfCommand);
+        rootCommand.Add(diagCommand);
 
         return rootCommand;
     }

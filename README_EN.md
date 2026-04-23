@@ -3,21 +3,21 @@
 # Unity Font Replacer AT
 
 `Unity_Font_Replacer_AT` is the C# / `AssetsTools.NET` port of `Unity_Font_Replacer`.  
-It scans, replaces, exports, and generates Unity TTF and TextMeshPro (TMP) SDF fonts.
+It scans, replaces, exports, and generates Unity TTF and SDF fonts.
 
-Unlike the original Python release layout, the C# port exposes its features through one CLI, with two localized executables instead of a runtime language switch.
+Unlike the original Python release layout, the C# port exposes its features through one CLI.
 
 ## Features
 
 - Replace Unity `Font` TTF assets
-- Replace TMP `MonoBehaviour`, atlas, and material data
-- `oneshot` mode that auto-generates per-padding TMP SDF assets from a single TTF
+- Replace SDF `MonoBehaviour`, atlas, and material data
+- `oneshot` mode that auto-generates per-padding SDF/Raster assets from a single TTF
 - Auto-generate dummy DLLs for Il2Cpp games when `Managed` is missing
 - JSON-based `parse` + `list` workflow
-- Export TMP font assets with `export`
-- Generate TMP-compatible SDF data with `makesdf`
+- Export SDF font assets with `export`
+- Generate SDF-compatible data with `makesdf`
 - Optional PS5 swizzle handling
-- Built-in `Mulmaru` and `NanumGothic` presets
+- Built-in `Mulmaru` (Raster) and `NanumGothic` (SDF) presets
 
 ## Release Layout
 
@@ -27,23 +27,26 @@ Release ZIPs typically look like this:
 release/
 ├── UnityFontReplacer_KO.exe
 ├── CharList_3911.txt
-├── KR_ASSETS/
+├── ASSETS/
 ├── Il2CppDumper/
+├── LICENSE
 └── README.md
 
 release_en/
 ├── UnityFontReplacer_EN.exe
 ├── CharList_3911.txt
-├── KR_ASSETS/
+├── ASSETS/
 ├── Il2CppDumper/
+├── LICENSE
 └── README_EN.md
 ```
 
 - `UnityFontReplacer_KO.exe`: Korean UI
 - `UnityFontReplacer_EN.exe`: English UI
 - `CharList_3911.txt`: default charset list
-- `KR_ASSETS/`: bundled replacement fonts and SDF resources
+- `ASSETS/`: bundled replacement fonts and SDF resources
 - `Il2CppDumper/`: helper for generating dummy `Managed` DLLs on Il2Cpp games
+- `LICENSE`: license for the code authored in this repository
 
 `classdata.tpk` is not included in releases.  
 If it is missing, the tool downloads it on first run.
@@ -80,7 +83,7 @@ This writes a file such as `MyGame.json` next to the executable.
 UnityFontReplacer_EN.exe list --gamepath "D:\Games\MyGame" --file ".\MyGame.json"
 ```
 
-### Export TMP fonts
+### Export SDF fonts
 
 ```bat
 UnityFontReplacer_EN.exe export --gamepath "D:\Games\MyGame"
@@ -94,18 +97,18 @@ Exported files go into `exported_fonts/` next to the executable.
 UnityFontReplacer_EN.exe makesdf --ttf ".\MyFont.ttf"
 ```
 
-Output files are written to the current working directory.
+Output files are written under `ASSETS/` in the current working directory.
 
 ## Command Summary
 
 | Command | Description |
 |---------|-------------|
-| `batch` | Bulk replacement using a built-in font or a custom font folder |
-| `oneshot` | Bulk replacement from a single TTF with auto-generated per-padding TMP SDF assets |
+| `batch` | Bulk replacement using a built-in preset or custom font source |
+| `oneshot` | Bulk replacement from a single TTF with auto-generated per-padding SDF/Raster assets |
 | `parse` | Save detected game font information as JSON |
 | `list` | Replace selected fonts from a JSON mapping |
-| `export` | Export TMP font data into `exported_fonts/` |
-| `makesdf` | Generate TMP-compatible JSON/atlas data from TTF |
+| `export` | Export SDF font data into `exported_fonts/` |
+| `makesdf` | Generate SDF-compatible JSON/atlas data from TTF |
 | `diag` | Bundle / assets diagnostic helper |
 
 ## `batch`
@@ -123,19 +126,23 @@ UnityFontReplacer_EN.exe batch --gamepath "D:\Games\MyGame" --font mulmaru --ps5
 |--------|-------------|
 | `--gamepath`, `-g` | Game root or `_Data` / `Data` directory |
 | `--font`, `-f` | `mulmaru`, `nanumgothic`, a font folder, `.ttf`, `.otf`, or `.json` |
-| `--sdfonly` | Replace TMP SDF only |
+| `--sdfonly` | Replace SDF only |
 | `--ttfonly` | Replace TTF only |
 | `--output-only <dir>` | Write modified files to another folder instead of in-place |
 | `--ps5-swizzle` | Enable PS5 atlas swizzle handling |
 
 ### Accepted `--font` forms
 
-- `mulmaru`, `nanumgothic`: built-in assets
-- directory path: uses JSON/PNG/TTF files from that folder
-- `.ttf` / `.otf`: TTF source for `Font` replacement
-- `.json`: TMP SDF source
+- `mulmaru`, `nanumgothic`: built-in presets
+- directory path: if the folder contains TTF/OTF, batch auto-generates temporary replacements; otherwise it uses the provided JSON/PNG assets
+- `.ttf` / `.otf`: TTF source for `Font` replacement, with auto-generated SDF replacements per original target padding
+- `.json`: prebuilt SDF source
 
-Built-in presets automatically choose the closest atlas padding variant from `Padding_5`, `Padding_7`, and `Padding_15`.
+For SDF targets, `batch` now behaves like `oneshot`: it auto-generates temporary SDF/Raster assets for each original target `atlas padding` value it finds in the game.  
+Built-in presets use fixed generation modes:
+
+- `mulmaru`: `raster`
+- `nanumgothic`: `sdf`
 
 ## `oneshot`
 
@@ -152,13 +159,21 @@ UnityFontReplacer_EN.exe oneshot --gamepath "D:\Games\MyGame" --font ".\NanumMyo
 |--------|-------------|
 | `--gamepath`, `-g` | Game root or `_Data` / `Data` directory |
 | `--font`, `-f` | Input TTF/OTF path or a resolvable font name |
-| `--sdfonly` | Replace TMP SDF only |
+| `--sdfonly` | Replace SDF only |
 | `--ttfonly` | Replace TTF only |
+| `--raster` | Generate temporary raster atlases for SDF replacements |
+| `--sdf` | Generate temporary SDF atlases for SDF replacements |
+| `--atlas-size <W,H>` | Temporary atlas size |
+| `--point-size <n>` | Temporary generation point size (`0` = auto) |
+| `--charset <file-or-text>` | Temporary generation charset |
+| `--filter-mode <mode>` | Temporary atlas filter mode (`point` / `bilinear` / `trilinear`) |
 | `--output-only <dir>` | Write modified files to another folder instead of in-place |
 | `--ps5-swizzle` | Enable PS5 atlas swizzle handling |
 
-`oneshot` uses the input TTF directly for Unity `Font` replacement, then auto-generates TMP SDF assets for each original target `atlas padding` value found during the scan and applies those generated assets automatically.  
-The generated SDF data uses `CharList_3911.txt` as the default charset.
+`oneshot` uses the input TTF directly for Unity `Font` replacement, then auto-generates SDF assets for each original target `atlas padding` value found during the scan and applies those generated assets automatically.  
+The default generation mode is `sdf`, the default charset is `CharList_3911.txt`, and the default filter mode is `bilinear`.
+
+`oneshot` preserves the original target game's `atlas padding`, so it does not expose a `--padding` override.
 
 ## `parse` + `list` workflow
 
@@ -200,10 +215,10 @@ If `Replace_to` is empty, that entry is skipped.
 
 For SDF entries, `Replace_to` supports both of these forms:
 
-- an existing SDF set name or a folder/JSON path under `KR_ASSETS`
+- an existing SDF set name or a folder/JSON path under `ASSETS`
 - a TTF/OTF path such as `NanumMyongjo.ttf` or `.\MyFont.otf`
 
-If an SDF entry uses a TTF/OTF in `Replace_to`, `list` behaves like `oneshot` for that entry: it auto-generates a temporary TMP SDF set using that target game's original TMP `atlas padding`, then applies the generated replacement automatically.  
+If an SDF entry uses a TTF/OTF in `Replace_to`, `list` behaves like `oneshot` for that entry: it auto-generates a temporary SDF set using that target game's original SDF `atlas padding`, then applies the generated replacement automatically.  
 The default charset is still `CharList_3911.txt`, and the default texture filter mode is `Bilinear`.
 
 ## `export`
@@ -244,18 +259,18 @@ UnityFontReplacer_EN.exe makesdf --ttf ".\Mulmaru.ttf" --filter-mode point
 Default `sdf` generation now uses an internal SDFAA-style path intended for normal text fonts.  
 `raster` remains for pixel-font / non-SDF atlas output.
 
-`makesdf` now saves its generated files automatically under `KR_ASSETS/` in the current working directory.
+`makesdf` now saves its generated files automatically under `ASSETS/` in the current working directory.
 
 ## Adding custom fonts
 
-Place these files under `KR_ASSETS/` or another font folder:
+Place these files under `ASSETS/` or another font folder:
 
 | File | Purpose |
 |------|---------|
 | `FontName.ttf` or `FontName.otf` | TTF replacement |
-| `FontName SDF.json` | TMP font data |
-| `FontName SDF Atlas.png` | TMP atlas |
-| `FontName SDF Material.json` | optional TMP material |
+| `FontName SDF.json` | SDF font data |
+| `FontName SDF Atlas.png` | SDF atlas |
+| `FontName SDF Material.json` | optional SDF material |
 
 ## Build from source
 
@@ -275,7 +290,8 @@ Generated files:
 - `publish\UnityFontReplacer_KO.exe`
 - `publish\UnityFontReplacer_EN.exe`
 - `publish\CharList_3911.txt`
-- `publish\KR_ASSETS\`
+- `publish\LICENSE`
+- `publish\ASSETS\`
 - `publish\Il2CppDumper\`
 
 ## GitHub Release
@@ -296,8 +312,22 @@ Users download it automatically when the executable starts.
 - `AssetsTools.NET` is included as a Git submodule and should remain vendor-owned.
 - For Il2Cpp games without `Managed`, `GameAssembly.dll`, `global-metadata.dat`, and the bundled `Il2CppDumper` are required.
 
+## License
+
+The original code written for this repository is released under the [MIT License](LICENSE).  
+However, third-party components such as submodules, bundled external tools, auto-downloaded files, fonts, and game data remain under their own licenses and rights, and are not relicensed by this repository's `LICENSE`.
+
+## Special Thanks
+
+- The original [Unity_Font_Replacer](https://github.com/snowyegret23/Unity_Font_Replacer) project
+- [AssetsTools.NET](https://github.com/nesrak1/AssetsTools.NET) for the Unity asset read/write foundation
+- [AssetRipper/Tpk](https://github.com/AssetRipper/Tpk) for providing `classdata.tpk`
+- [Perfare/Il2CppDumper](https://github.com/Perfare/Il2CppDumper) for Il2Cpp dummy `Managed` generation
+- `System.CommandLine`, `Spectre.Console`, `SixLabors.ImageSharp`, `SixLabors.Fonts`, and `SixLabors.ImageSharp.Drawing` for CLI, rendering, and font-processing support
+
 ## Disclaimer
 
 - This project is an unofficial independent tool and is not affiliated with, endorsed by, or sponsored by Unity Technologies, TextMeshPro, any game developer/publisher, or any font vendor.
 - `Unity`, `TextMeshPro`, and all game/font names remain the property of their respective owners.
+- This software is provided `as is` under the `LICENSE`, without express or implied warranties, and users assume responsibility for its use.
 - Users are responsible for checking and complying with each game's terms, font licenses, copyright rules, and applicable laws.

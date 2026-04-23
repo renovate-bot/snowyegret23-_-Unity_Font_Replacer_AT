@@ -7,37 +7,51 @@ namespace UnityFontReplacer.CLI;
 
 public static class BatchCommand
 {
+    private sealed class BuiltinPreset
+    {
+        public required string Alias { get; init; }
+        public bool ForceRaster { get; init; }
+    }
+
     private sealed class BatchFontSpec
     {
         public required string SdfSource { get; init; }
         public string? TtfPath { get; init; }
+        public bool ForceRaster { get; init; }
     }
 
-    public static Command Build(Option<string> gamePathOption)
+    public static Command Build()
     {
-        var batchCommand = new Command("batch", "Batch replace all fonts with a builtin font");
+        var batchCommand = new Command("batch", "Batch replace all fonts using a built-in preset or custom font source");
+        var gamePathOption = CommandLineOptions.CreateGamePathOption();
 
-        var fontOption = new Option<string>(
-            aliases: ["--font", "-f"],
-            description: "Builtin font name (mulmaru / nanumgothic) or path to font directory")
-        { IsRequired = true };
+        var fontOption = CommandLineOptions.RequiredOption<string>(
+            "--font",
+            "Builtin font name, TTF/OTF path/name, or path to font directory",
+            "-f");
 
-        var ps5Option = new Option<bool>("--ps5-swizzle", "Handle PS5 texture swizzle");
-        var outputOption = new Option<string?>("--output-only", "Write modified files to this directory instead of in-place");
-        var sdfOnlyOption = new Option<bool>("--sdfonly", "Replace SDF fonts only");
-        var ttfOnlyOption = new Option<bool>("--ttfonly", "Replace TTF fonts only");
+        var ps5Option = CommandLineOptions.OptionalOption<bool>("--ps5-swizzle", "Handle PS5 texture swizzle");
+        var outputOption = CommandLineOptions.OptionalOption<string?>("--output-only", "Write modified files to this directory instead of in-place");
+        var sdfOnlyOption = CommandLineOptions.OptionalOption<bool>("--sdfonly", "Replace SDF fonts only");
+        var ttfOnlyOption = CommandLineOptions.OptionalOption<bool>("--ttfonly", "Replace TTF fonts only");
 
-        batchCommand.AddOption(gamePathOption);
-        batchCommand.AddOption(fontOption);
-        batchCommand.AddOption(ps5Option);
-        batchCommand.AddOption(outputOption);
-        batchCommand.AddOption(sdfOnlyOption);
-        batchCommand.AddOption(ttfOnlyOption);
+        batchCommand.Add(gamePathOption);
+        batchCommand.Add(fontOption);
+        batchCommand.Add(ps5Option);
+        batchCommand.Add(outputOption);
+        batchCommand.Add(sdfOnlyOption);
+        batchCommand.Add(ttfOnlyOption);
 
-        batchCommand.SetHandler(async (gamePath, font, ps5, output, sdfOnly, ttfOnly) =>
+        batchCommand.SetAction(async parseResult =>
         {
-            await ExecuteAsync(gamePath, font, ps5, output, sdfOnly, ttfOnly);
-        }, gamePathOption, fontOption, ps5Option, outputOption, sdfOnlyOption, ttfOnlyOption);
+            await ExecuteAsync(
+                parseResult.GetRequiredValue(gamePathOption),
+                parseResult.GetRequiredValue(fontOption),
+                parseResult.GetValue(ps5Option),
+                parseResult.GetValue(outputOption),
+                parseResult.GetValue(sdfOnlyOption),
+                parseResult.GetValue(ttfOnlyOption));
+        });
 
         return batchCommand;
     }
@@ -97,6 +111,7 @@ public static class BatchCommand
             if (entry.Type == FontType.SDF)
             {
                 entry.ReplaceTo = fontSpec.SdfSource;
+                entry.ForceRaster = fontSpec.ForceRaster ? "true" : null;
                 assignCount++;
                 continue;
             }
@@ -128,26 +143,32 @@ public static class BatchCommand
 
     private static BatchFontSpec? ResolveBatchFontSpec(string fontName)
     {
-        if (TryGetBuiltinAlias(fontName, out var builtinAlias))
+        if (TryGetBuiltinPreset(fontName, out var preset))
         {
-            var ttfPath = ResolveBuiltinTtfPath(builtinAlias);
+            var ttfPath = ResolveBuiltinTtfPath(preset.Alias);
+            if (ttfPath == null)
+                return null;
+
             return new BatchFontSpec
             {
-                SdfSource = builtinAlias,
+                SdfSource = ttfPath,
                 TtfPath = ttfPath,
+                ForceRaster = preset.ForceRaster,
             };
         }
 
         if (Directory.Exists(fontName))
         {
+            var ttfPath = Directory
+                .EnumerateFiles(fontName, "*.*", SearchOption.TopDirectoryOnly)
+                .FirstOrDefault(path =>
+                    path.EndsWith(".ttf", StringComparison.OrdinalIgnoreCase) ||
+                    path.EndsWith(".otf", StringComparison.OrdinalIgnoreCase));
             return new BatchFontSpec
             {
-                SdfSource = fontName,
-                TtfPath = Directory
-                    .EnumerateFiles(fontName, "*.*", SearchOption.TopDirectoryOnly)
-                    .FirstOrDefault(path =>
-                        path.EndsWith(".ttf", StringComparison.OrdinalIgnoreCase) ||
-                        path.EndsWith(".otf", StringComparison.OrdinalIgnoreCase)),
+                SdfSource = ttfPath ?? fontName,
+                TtfPath = ttfPath,
+                ForceRaster = false,
             };
         }
 
@@ -158,8 +179,9 @@ public static class BatchCommand
             {
                 return new BatchFontSpec
                 {
-                    SdfSource = Path.GetDirectoryName(fontName)!,
+                    SdfSource = fontName,
                     TtfPath = fontName,
+                    ForceRaster = false,
                 };
             }
 
@@ -175,6 +197,7 @@ public static class BatchCommand
                 {
                     SdfSource = fontName,
                     TtfPath = ttfPath,
+                    ForceRaster = false,
                 };
             }
         }
@@ -182,9 +205,9 @@ public static class BatchCommand
         var exeDir = AppDomain.CurrentDomain.BaseDirectory;
         var candidates = new[]
         {
-            Path.Combine(exeDir, "KR_ASSETS", fontName),
+            Path.Combine(exeDir, "ASSETS", fontName),
             Path.Combine(exeDir, fontName),
-            Path.Combine(Directory.GetCurrentDirectory(), "KR_ASSETS", fontName),
+            Path.Combine(Directory.GetCurrentDirectory(), "ASSETS", fontName),
             Path.Combine(Directory.GetCurrentDirectory(), fontName),
         };
 
@@ -206,27 +229,47 @@ public static class BatchCommand
 
             return new BatchFontSpec
             {
-                SdfSource = dir,
+                SdfSource = ttfPath ?? dir,
                 TtfPath = ttfPath,
+                ForceRaster = false,
+            };
+        }
+
+        var resolvedTtfPath = TtfFontHandler.ResolveTtfPath(fontName);
+        if (resolvedTtfPath != null)
+        {
+            return new BatchFontSpec
+            {
+                SdfSource = resolvedTtfPath,
+                TtfPath = resolvedTtfPath,
+                ForceRaster = false,
             };
         }
 
         return null;
     }
 
-    private static bool TryGetBuiltinAlias(string input, out string alias)
+    private static bool TryGetBuiltinPreset(string input, out BuiltinPreset preset)
     {
-        alias = "";
+        preset = null!;
         var normalized = input.Trim();
         if (normalized.Equals("mulmaru", StringComparison.OrdinalIgnoreCase))
         {
-            alias = "Mulmaru";
+            preset = new BuiltinPreset
+            {
+                Alias = "Mulmaru",
+                ForceRaster = true,
+            };
             return true;
         }
 
         if (normalized.Equals("nanumgothic", StringComparison.OrdinalIgnoreCase))
         {
-            alias = "NanumGothic";
+            preset = new BuiltinPreset
+            {
+                Alias = "NanumGothic",
+                ForceRaster = false,
+            };
             return true;
         }
 
@@ -253,8 +296,8 @@ public static class BatchCommand
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var root in new[]
                  {
-                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KR_ASSETS"),
-                     Path.Combine(Directory.GetCurrentDirectory(), "KR_ASSETS"),
+                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ASSETS"),
+                     Path.Combine(Directory.GetCurrentDirectory(), "ASSETS"),
                  })
         {
             if (Directory.Exists(root) && seen.Add(root))

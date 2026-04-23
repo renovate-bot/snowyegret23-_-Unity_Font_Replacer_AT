@@ -33,8 +33,8 @@ public static class Strings
         },
         ["cmd_export"] = new()
         {
-            ["ko"] = "TMP 폰트 에셋 추출 (JSON + PNG)",
-            ["en"] = "Export TMP font assets (JSON + PNG)",
+            ["ko"] = "SDF 폰트 에셋 추출 (JSON + PNG)",
+            ["en"] = "Export SDF font assets (JSON + PNG)",
         },
         ["cmd_makesdf"] = new()
         {
@@ -43,8 +43,8 @@ public static class Strings
         },
         ["cmd_oneshot"] = new()
         {
-            ["ko"] = "단일 TTF로 TTF/TMP 폰트를 자동 생성 후 일괄 교체",
-            ["en"] = "Replace TTF/TMP fonts from a single TTF with auto-generated SDF assets",
+            ["ko"] = "단일 TTF로 TTF/SDF 폰트를 자동 생성 후 일괄 교체",
+            ["en"] = "Replace TTF/SDF fonts from a single TTF with auto-generated SDF or raster assets",
         },
         ["scan_start"] = new()
         {
@@ -63,13 +63,13 @@ public static class Strings
         },
         ["scan_found_tmp"] = new()
         {
-            ["ko"] = "TMP 폰트 발견: {0} ({1})",
-            ["en"] = "TMP font found: {0} ({1})",
+            ["ko"] = "SDF 폰트 발견: {0} ({1})",
+            ["en"] = "SDF font found: {0} ({1})",
         },
         ["scan_complete"] = new()
         {
-            ["ko"] = "스캔 완료: TTF {0}개, TMP {1}개 발견",
-            ["en"] = "Scan complete: found {0} TTF, {1} TMP fonts",
+            ["ko"] = "스캔 완료: TTF {0}개, SDF {1}개 발견",
+            ["en"] = "Scan complete: found {0} TTF, {1} SDF fonts",
         },
         ["err_gamepath_not_found"] = new()
         {

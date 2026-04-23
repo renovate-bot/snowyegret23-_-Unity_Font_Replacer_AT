@@ -12,7 +12,8 @@ public class Program
         var sw = Stopwatch.StartNew();
 
         var rootCommand = CommandBuilder.Build();
-        var result = await rootCommand.InvokeAsync(args);
+        var parseResult = rootCommand.Parse(args);
+        var result = await parseResult.InvokeAsync(new InvocationConfiguration(), CancellationToken.None);
 
         sw.Stop();
         AnsiConsole.MarkupLine($"[dim]Elapsed: {FormatElapsed(sw.Elapsed)}[/]");
