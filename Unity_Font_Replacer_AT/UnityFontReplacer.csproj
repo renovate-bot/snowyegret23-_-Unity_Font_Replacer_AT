@@ -72,6 +72,7 @@
     <Copy SourceFiles="@(Il2CppDumperFiles)"
           DestinationFiles="@(Il2CppDumperFiles->'$(PublishDir)Il2CppDumper\%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />
+
   </Target>
 
   <Target Name="PublishLocalizedVariants">
@@ -80,7 +81,7 @@
       <EnStageDir>$(BaseIntermediateOutputPath)variant-publish\en\</EnStageDir>
     </PropertyGroup>
 
-    <RemoveDir Directories="$(KoStageDir);$(EnStageDir)" />
+    <RemoveDir Directories="$(KoStageDir);$(EnStageDir);$(VariantPublishDir)" />
     <MakeDir Directories="$(KoStageDir);$(EnStageDir);$(VariantPublishDir)" />
 
     <ItemGroup>
@@ -117,6 +118,7 @@
     <Copy SourceFiles="@(Il2CppDumperFiles)"
           DestinationFiles="@(Il2CppDumperFiles->'$(VariantPublishDir)Il2CppDumper\%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />
+
   </Target>
 
 </Project>

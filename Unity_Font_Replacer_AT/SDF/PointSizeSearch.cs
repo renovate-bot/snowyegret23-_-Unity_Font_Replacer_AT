@@ -36,6 +36,37 @@ public static class PointSizeSearch
         return TryPack(renderer, unicodes, pointSize, atlasWidth, atlasHeight, padding);
     }
 
+    public static int FindExactFitAtOrBelow(
+        GlyphRenderer renderer,
+        int[] unicodes,
+        int pointSize,
+        int atlasWidth,
+        int atlasHeight,
+        int padding)
+    {
+        pointSize = Math.Clamp(pointSize, 8, 512);
+
+        int low = 8;
+        int high = pointSize;
+        int best = 0;
+
+        while (low <= high)
+        {
+            int mid = (low + high) / 2;
+            if (TryPack(renderer, unicodes, mid, atlasWidth, atlasHeight, padding, exact: false))
+            {
+                best = mid;
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid - 1;
+            }
+        }
+
+        return best;
+    }
+
     private static int FindByBinarySearch(
         GlyphRenderer renderer, int[] unicodes,
         int atlasWidth, int atlasHeight, int padding)
@@ -57,7 +88,13 @@ public static class PointSizeSearch
             }
         }
 
-        return best;
+        return FindExactFitAtOrBelow(
+            renderer,
+            unicodes,
+            Math.Min(512, best + 24),
+            atlasWidth,
+            atlasHeight,
+            padding);
     }
 
     private static int FindFromFixed(
@@ -70,6 +107,10 @@ public static class PointSizeSearch
 
         if (TryPackFast(probeGlyphs, startSize, atlasWidth, atlasHeight, padding))
             return startSize;
+
+        int exactFit = FindExactFitAtOrBelow(renderer, unicodes, startSize, atlasWidth, atlasHeight, padding);
+        if (exactFit > 0)
+            return exactFit;
 
         // 점진적 축소
         int[] reductions = [4, 8, 12, 16, 24, 32, 48, 64, 96, 128];
@@ -114,7 +155,7 @@ public static class PointSizeSearch
             rects.Add(new ShelfPacker.GlyphRect(unicode, w, h));
         }
 
-        return ShelfPacker.Pack(rects, atlasWidth, atlasHeight) != null;
+        return ShelfPacker.CanPackFast(rects, atlasWidth, atlasHeight);
     }
 
     private static bool TryPackFast(

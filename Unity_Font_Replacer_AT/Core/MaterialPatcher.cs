@@ -142,7 +142,26 @@ public static class MaterialPatcher
     {
         var baseField = am.GetBaseField(inst, matInfo);
         ApplyPlan(baseField, plan);
+        LogKeyProperties(baseField);
         matInfo.SetNewData(baseField);
+    }
+
+    private static void LogKeyProperties(AssetTypeValueField materialField)
+    {
+        var nameField = materialField["m_Name"];
+        string name = nameField.IsDummy ? "?" : nameField.AsString;
+        var floats = new[] { "_GradientScale", "_ScaleRatioA", "_ScaleRatioB", "_ScaleRatioC",
+                             "_Sharpness", "_WeightNormal", "_FaceDilate",
+                             "_OutlineWidth", "_OutlineSoftness",
+                             "_TextureWidth", "_TextureHeight" };
+        var parts = new List<string>();
+        foreach (var key in floats)
+        {
+            var value = ReadFloat(materialField, key);
+            if (value.HasValue)
+                parts.Add($"{key}={value.Value:G6}");
+        }
+        Spectre.Console.AnsiConsole.MarkupLine($"[dim]Material[/] [cyan]{Spectre.Console.Markup.Escape(name)}[/]: {Spectre.Console.Markup.Escape(string.Join(", ", parts))}");
     }
 
     public static AssetFileInfo? FindMaterialByPathId(AssetsFileInstance inst, long pathId)

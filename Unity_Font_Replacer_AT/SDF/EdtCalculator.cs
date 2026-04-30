@@ -45,7 +45,7 @@ public static class EdtCalculator
 
         var toFilled = BuildDistanceGrid(coverage, width, height, invert: false);
         var toEmpty = BuildDistanceGrid(coverage, width, height, invert: true);
-        float scale = Midpoint / ((Math.Max(1, padding) * 2f) + 2f);
+        float scale = Midpoint / Math.Max(1f, padding + 1f);
 
         var result = new byte[height, width];
         for (int y = 0; y < height; y++)
@@ -199,10 +199,11 @@ public static class EdtCalculator
 
     private static bool CanPropagate(float alpha, float distance)
     {
-        if (distance <= 0f || distance >= InfiniteDistance)
-            return false;
-
-        return alpha <= 0f || alpha >= 1f;
+        // Fully-filled pixels (alpha>=1, distance=0) are anchors - they define the glyph
+        // interior and provide distance=0 reference. Skipping them prevents overwriting.
+        // Every other pixel (empty or edge) must be updatable so sweeps can propagate
+        // distances from anchors through the bitmap.
+        return alpha < One;
     }
 
     private static void UpdateFromNeighbor(
@@ -333,7 +334,7 @@ public static class EdtCalculator
 
         var distToOutside = DistanceTransform(outside);
         var distToInside = DistanceTransform(inside);
-        float scale = Midpoint / ((Math.Max(1, padding) * 2f) + 2f);
+        float scale = Midpoint / Math.Max(1f, padding + 1f);
         var result = new byte[height, width];
 
         for (int y = 0; y < height; y++)

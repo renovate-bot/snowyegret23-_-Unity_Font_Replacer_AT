@@ -121,17 +121,31 @@ public static class TextureHandler
 
     private static void ApplyFilterMode(AssetTypeValueField baseField, TextureFilterMode? filterMode)
     {
+        var nameField = baseField["m_Name"];
+        string texName = nameField.IsDummy ? "?" : nameField.AsString;
+
         if (!filterMode.HasValue)
+        {
+            Spectre.Console.AnsiConsole.MarkupLine($"[dim]FilterMode: {Spectre.Console.Markup.Escape(texName)} (unchanged, caller passed null)[/]");
             return;
+        }
 
         var textureSettings = baseField["m_TextureSettings"];
         if (textureSettings.IsDummy)
+        {
+            Spectre.Console.AnsiConsole.MarkupLine($"[yellow]FilterMode: {Spectre.Console.Markup.Escape(texName)} — m_TextureSettings missing, skipped[/]");
             return;
+        }
 
         var filterField = textureSettings["m_FilterMode"];
         if (filterField.IsDummy)
+        {
+            Spectre.Console.AnsiConsole.MarkupLine($"[yellow]FilterMode: {Spectre.Console.Markup.Escape(texName)} — m_FilterMode missing, skipped[/]");
             return;
+        }
 
+        int previous = filterField.AsInt;
         filterField.AsInt = (int)filterMode.Value;
+        Spectre.Console.AnsiConsole.MarkupLine($"[cyan]FilterMode: {Spectre.Console.Markup.Escape(texName)} {previous} → {(int)filterMode.Value} ({filterMode.Value})[/]");
     }
 }

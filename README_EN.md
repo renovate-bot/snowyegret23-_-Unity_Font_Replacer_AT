@@ -354,7 +354,7 @@ However, third-party components such as submodules, bundled external tools, auto
 - [AssetsTools.NET](https://github.com/nesrak1/AssetsTools.NET) for the Unity asset read/write foundation
 - [AssetRipper/Tpk](https://github.com/AssetRipper/Tpk) for providing `classdata.tpk`
 - [Perfare/Il2CppDumper](https://github.com/Perfare/Il2CppDumper) for Il2Cpp dummy `Managed` generation
-- `System.CommandLine`, `Spectre.Console`, `SixLabors.ImageSharp`, `SixLabors.Fonts`, and `SixLabors.ImageSharp.Drawing` for CLI, rendering, and font-processing support
+- `System.CommandLine`, `Spectre.Console`, `SixLabors.ImageSharp`, and `FreeTypeSharp` for CLI, image, and font-processing support
 
 ## Disclaimer
 

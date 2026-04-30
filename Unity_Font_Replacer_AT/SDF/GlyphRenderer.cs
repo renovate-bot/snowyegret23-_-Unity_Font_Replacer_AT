@@ -55,33 +55,31 @@ public unsafe class GlyphRenderer : IDisposable
     public GlyphMetrics MeasureGlyph(int unicode, float pointSize, int padding = 0)
     {
         int pixelSize = NormalizePixelSize(pointSize);
+        var glyph = LoadGlyph(unicode, pixelSize);
+
+        int width = glyph.BitmapWidth;
+        int height = glyph.BitmapHeight;
+        int bearingX = glyph.HorizontalBearingX;
+        int bearingY = glyph.HorizontalBearingY;
+
         if (!_rasterMode && padding > 0)
         {
-            var sdfGlyph = LoadGlyphAsSdf(unicode, pixelSize, padding);
-            return new GlyphMetrics
-            {
-                Unicode = unicode,
-                Width = sdfGlyph.BitmapWidth,
-                Height = sdfGlyph.BitmapHeight,
-                HorizontalBearingX = sdfGlyph.HorizontalBearingX,
-                HorizontalBearingY = sdfGlyph.HorizontalBearingY,
-                HorizontalAdvance = sdfGlyph.HorizontalAdvance,
-                BoundsWidth = sdfGlyph.BitmapWidth,
-                BoundsHeight = sdfGlyph.BitmapHeight,
-            };
+            width += padding * 2;
+            height += padding * 2;
+            bearingX -= padding;
+            bearingY += padding;
         }
 
-        var glyph = LoadGlyph(unicode, pixelSize);
         return new GlyphMetrics
         {
             Unicode = unicode,
-            Width = glyph.BitmapWidth,
-            Height = glyph.BitmapHeight,
-            HorizontalBearingX = glyph.HorizontalBearingX,
-            HorizontalBearingY = glyph.HorizontalBearingY,
+            Width = width,
+            Height = height,
+            HorizontalBearingX = bearingX,
+            HorizontalBearingY = bearingY,
             HorizontalAdvance = glyph.HorizontalAdvance,
-            BoundsWidth = glyph.BitmapWidth,
-            BoundsHeight = glyph.BitmapHeight,
+            BoundsWidth = width,
+            BoundsHeight = height,
         };
     }
 
@@ -144,6 +142,11 @@ public unsafe class GlyphRenderer : IDisposable
         return result;
     }
 
+    public bool ContainsGlyph(int unicode)
+    {
+        return FT_Get_Char_Index(_face, (nuint)unicode) != 0;
+    }
+
     public byte[,] RenderGlyphBitmap(int unicode, float pointSize, int padding, out int offsetX, out int offsetY)
     {
         int pixelSize = NormalizePixelSize(pointSize);
@@ -174,7 +177,7 @@ public unsafe class GlyphRenderer : IDisposable
     public byte[,]? RenderGlyphSdfBitmap(int unicode, float pointSize, int spread, out int offsetX, out int offsetY)
     {
         int pixelSize = NormalizePixelSize(pointSize);
-        var glyph = LoadGlyphAsSdf(unicode, pixelSize, spread);
+        var glyph = LoadGlyphAsSdf(unicode, pixelSize, ResolveSdfSpread(spread));
         offsetX = glyph.HorizontalBearingX;
         offsetY = glyph.HorizontalBearingY;
 
@@ -314,6 +317,11 @@ public unsafe class GlyphRenderer : IDisposable
     private static int NormalizePixelSize(float pointSize)
     {
         return Math.Max(1, (int)MathF.Round(pointSize));
+    }
+
+    private static int ResolveSdfSpread(int padding)
+    {
+        return Math.Max(1, padding + 1);
     }
 
     private GlyphMetrics ApplyPackingPadding(GlyphMetrics metrics, int padding)

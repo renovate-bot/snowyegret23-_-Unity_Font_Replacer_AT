@@ -354,7 +354,7 @@ dotnet msbuild .\Unity_Font_Replacer_AT\UnityFontReplacer.csproj /t:PublishLocal
 - Unity 에셋 읽기/쓰기 기반을 제공하는 [AssetsTools.NET](https://github.com/nesrak1/AssetsTools.NET)
 - `classdata.tpk`를 제공하는 [AssetRipper/Tpk](https://github.com/AssetRipper/Tpk)
 - Il2Cpp 더미 `Managed` 생성을 위해 사용하는 [Perfare/Il2CppDumper](https://github.com/Perfare/Il2CppDumper)
-- CLI/렌더링/폰트 처리에 사용한 `System.CommandLine`, `Spectre.Console`, `SixLabors.ImageSharp`, `SixLabors.Fonts`, `SixLabors.ImageSharp.Drawing`
+- CLI/이미지/폰트 처리에 사용한 `System.CommandLine`, `Spectre.Console`, `SixLabors.ImageSharp`, `FreeTypeSharp`
 
 ## 면책
 

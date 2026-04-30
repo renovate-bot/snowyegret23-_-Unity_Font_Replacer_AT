@@ -209,23 +209,45 @@ public static class OneShotCommand
                         Directory.CreateDirectory(paddingDir);
 
                         AnsiConsole.MarkupLine($"[cyan]Generating {displayMode}: padding {padding}, point size {pointSizeLabel}[/]");
-                        var result = useAutomaticReplacementStrategy
-                            ? SdfGenerator.GenerateForReplacement(
-                                ttfData,
-                                unicodes,
-                                padding: padding,
-                                pointSizeHint: 0,
-                                rasterMode: rasterMode,
-                                filterMode: resolvedFilterMode)
-                            : SdfGenerator.Generate(
-                                ttfData,
-                                unicodes,
-                                atlasWidth: atlasWidth,
-                                atlasHeight: atlasHeight,
-                                padding: padding,
-                                pointSize: pointSize,
-                                rasterMode: rasterMode,
-                                filterMode: resolvedFilterMode);
+                        SDF.SdfGenerator.SdfResult result;
+                        try
+                        {
+                            result = useAutomaticReplacementStrategy
+                                ? SdfGenerator.GenerateForReplacement(
+                                    ttfData,
+                                    unicodes,
+                                    padding: padding,
+                                    pointSizeHint: 0,
+                                    rasterMode: rasterMode,
+                                    filterMode: resolvedFilterMode)
+                                : SdfGenerator.Generate(
+                                    ttfData,
+                                    unicodes,
+                                    atlasWidth: atlasWidth,
+                                    atlasHeight: atlasHeight,
+                                    padding: padding,
+                                    pointSize: pointSize,
+                                    rasterMode: rasterMode,
+                                    filterMode: resolvedFilterMode);
+                        }
+                        catch (Exception ex)
+                        {
+                            AnsiConsole.MarkupLine($"[red]SDF generation failed (padding {padding}): {Markup.Escape(ex.GetType().FullName ?? "Exception")}: {Markup.Escape(ex.Message)}[/]");
+                            if (!string.IsNullOrWhiteSpace(ex.StackTrace))
+                                AnsiConsole.WriteLine(ex.StackTrace);
+                            var inner = ex.InnerException;
+                            while (inner != null)
+                            {
+                                AnsiConsole.MarkupLine($"[red]  Caused by: {Markup.Escape(inner.GetType().FullName ?? "Exception")}: {Markup.Escape(inner.Message)}[/]");
+                                if (!string.IsNullOrWhiteSpace(inner.StackTrace))
+                                    AnsiConsole.WriteLine(inner.StackTrace);
+                                inner = inner.InnerException;
+                            }
+                            throw;
+                        }
+
+                        AnsiConsole.MarkupLine(
+                            $"[grey]Generated {displayMode}: atlas size {result.FontAsset.AtlasWidth}x{result.FontAsset.AtlasHeight}, packed {result.FontAsset.GlyphCount}/{unicodes.Length}, point size {result.FontAsset.FaceInfo.PointSize}, padding {padding}[/]");
 
                         try
                         {
@@ -282,12 +304,23 @@ public static class OneShotCommand
         {
             if (!string.IsNullOrWhiteSpace(tempRoot))
             {
-                try
+                bool keep = string.Equals(
+                    Environment.GetEnvironmentVariable("FONT_REPLACER_KEEP_ATLAS"),
+                    "1",
+                    StringComparison.Ordinal);
+                if (keep)
                 {
-                    Directory.Delete(tempRoot, recursive: true);
+                    AnsiConsole.MarkupLine($"[yellow]Generated atlas kept at: {Markup.Escape(tempRoot)}[/]");
                 }
-                catch
+                else
                 {
+                    try
+                    {
+                        Directory.Delete(tempRoot, recursive: true);
+                    }
+                    catch
+                    {
+                    }
                 }
             }
         }

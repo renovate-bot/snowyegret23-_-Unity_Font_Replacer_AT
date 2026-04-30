@@ -850,6 +850,9 @@ public class FontReplacer
             rasterMode: preferRaster,
             filterMode: filterMode);
 
+        AnsiConsole.MarkupLine(
+            $"[grey]Generated {displayMode}: atlas size {result.FontAsset.AtlasWidth}x{result.FontAsset.AtlasHeight}, packed {result.FontAsset.GlyphCount}/{unicodes.Length}, point size {result.FontAsset.FaceInfo.PointSize}, padding {padding}[/]");
+
         var outputDir = Path.Combine(
             generatedRoot,
             $"{SanitizePathSegment(fontBaseName)}_{modeSuffix}_padding_{padding}_atlas_{result.FontAsset.AtlasWidth}x{result.FontAsset.AtlasHeight}_ps_{result.FontAsset.FaceInfo.PointSize}");
